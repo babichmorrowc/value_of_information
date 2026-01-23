@@ -53,6 +53,53 @@ def get_ind_lat_lon(Exp,
 
     return (ind, lat, lon)
 
+# Function to calculate Y_e based on all the risk and decision inputs
+def calc_Ye(
+        index,
+        ind,
+        input_data_path,
+        risk_inputs, # length of 5: calibration, warming level, SSP, vuln param 1, vuln param 2
+        decision_inputs # length of 3: cost per day of work, annual cost per person of this decision, efficacy of this decision
+):
+    # Get EAI
+    EAI = get_EAI(input_data_path,
+            data_source = risk_inputs[0],
+            warming_level = risk_inputs[1],
+            ssp = risk_inputs[2],
+            vp1 = risk_inputs[3],
+            vp2 = risk_inputs[4])
+    # state of nature (risk)
+    xi = EAI[ind[0][index],ind[1][index],:]
+    # If EAI in a region is < 0, we will set it to 0
+    xi[np.where(xi < 0)] = 0
+
+    # Get exposure
+    # Exposure depends on SSP and SSP year (which comes from warming level)
+    # Get SSP year to use based on warming level
+    if risk_inputs[1] == "2deg":
+        ssp_year = 2041
+    else:
+        ssp_year = 2084
+    Exp = get_Exp(input_data_path,
+                  ssp = risk_inputs[2],
+                  ssp_year = ssp_year)
+    # no. of people/jobs in each location
+    ppl = Exp[ind[0][index],ind[1][index]]
+    # Initialize cost values for 1000 GAM samples
+    cost = np.empty(1000)
+    for k in range(1000): # loop over GAM samples
+        EAI_k = (10**xi[k] - 1)
+        # cost outcome for sample k
+        cost[k] = decision_inputs[1]*ppl + decision_inputs[0]*(1-decision_inputs[2])*EAI_k
+    # Average cost over the 1000 GAM samples
+    Y_e = np.mean(cost)
+    return Y_e
+
+
+    
+    
+    
+
 # Function to find decision in a single cell
 def decision_single_cell(ind,
          index,
@@ -63,7 +110,7 @@ def decision_single_cell(ind,
          cost_per_day):
     # state of nature (risk)
     xi = EAI[ind[0][index],ind[1][index],:]
-     # If EAI in a region is < 0, we will set it to 0
+    # If EAI in a region is < 0, we will set it to 0
     xi[np.where(xi < 0)] = 0
     # no. of people/jobs in each location
     ppl = Exp[ind[0][index],ind[1][index]]

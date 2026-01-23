@@ -25,10 +25,17 @@ ssp_opts = ["1", "2", "5"]
 vuln1_opts = ["53.78", "54.5", "55.79"]
 vuln2_opts = ["-4.597", "-4.1", "-3.804"]
 
-# Read in Latin hypercube samples
-n_samples = 200
-# 200 rows (number of samples) x 6 columns (number of parameters)
-X_n = np.loadtxt(DATA_DIR + 'lat_hyp_samples_' + str(n_samples) + '.csv', delimiter=',')
+# # Read in Latin hypercube samples
+# n_samples = 200
+# # 200 rows (number of samples) x 6 columns (number of parameters)
+# X_n = np.loadtxt(DATA_DIR + 'lat_hyp_samples_' + str(n_samples) + '.csv', delimiter=',')
+
+# Ranges for annual cost per person for each decision
+AC_lows = [0, 150, 500]
+AC_highs = [0, 350, 700]
+# Ranges for efficacies for each decision
+E_lows = [0, 30, 70]
+E_highs = [0, 50, 90]
 
 # X labels
 # Not worrying about non-financial yet
@@ -55,89 +62,152 @@ X_e_labels = ['SSP',
             'Annual cost per person of d3',
             'Effectiveness of d3']
 
-# Loop over all combinations of risk x decision options
-lon_exp_utils = []
-X_samples = []
-# Loop over risk parameters
-for ssp in ssp_opts:
-    for warm in warming_opts:
-        # Exposure depends on SSP and SSP year (which comes from warming level)
-        # Get SSP year to use based on warming level
-        if warm == "2deg":
-            ssp_year = 2041
-        else:
-            ssp_year = 2084
-        # Get array of exposure in each cell
-        Exp_array = get_Exp(input_data_path = DATA_DIR,
-                            ssp = ssp,
-                            ssp_year = ssp_year)
-        for cal in calibration_opts:
-            for vuln1 in vuln1_opts:
-                for vuln2 in vuln2_opts:
-                    # String of risk inputs
-                    risk_input_string = 'ssp'+ssp+'_'+warm+'_'+cal+'_v1_'+vuln1+'_v2_'+vuln2
-                    print(risk_input_string)
+# Get land indices
+# I think I only have to do this once
+Exp_array = get_Exp(input_data_path = DATA_DIR,
+                    ssp = ssp_opts[0],
+                    ssp_year = 2041)
+ind, lat, lon = get_ind_lat_lon(Exp_array,
+                                DATA_DIR,
+                                data_source = calibration_opts[0],
+                                warming_level = warming_opts[0],
+                                ssp = ssp_opts[0],
+                                vp1 = vuln1_opts[0],
+                                vp2 = vuln2_opts[0])
 
-                    # Get array of EAI
-                    # 1000 samples in each cell
-                    # 1000 samples from f(theta | risk inputs)
-                    EAI_array = get_EAI(input_data_path = DATA_DIR,
-                                        data_source = cal,
-                                        warming_level = warm,
-                                        ssp = ssp,
-                                        vp1 = vuln1,
-                                        vp2 = vuln2)
+# Calculate Y_e(d)
+N = 1000
+expected_losses = np.empty(nd)
+Y_e_samples = np.empty((nd, N))  # store per-sample Y_e for plotting later
+AC_samples = np.empty((nd, N))
+E_samples = np.empty((nd, N))
+# Sample the risk inputs
+risk_samples = [
+    np.random.choice(calibration_opts, size=N, replace=True),
+    np.random.choice(warming_opts, size=N, replace=True),
+    np.random.choice(ssp_opts, size=N, replace=True),
+    np.random.choice(vuln1_opts, size=N, replace=True),
+    np.random.choice(vuln2_opts, size=N, replace=True)
+]
+# Sample the cost per day of work
+DC_samples = np.random.uniform(low=100, high=300, size=N)
+# Loop over the decisions
+for d in range(nd):
+    print('Calculating for decision:', d+1)
+    # Sample cost per person per year for decision d
+    AC_samps = np.random.uniform(low = AC_lows[d], high = AC_lows[d], size=N)
+    AC_samples[d] = AC_samps
+    # Sample efficacy for decision d
+    E_samps = np.random.uniform(low = E_lows[d], high=E_highs[d], size=N)
+    E_samples[d] = E_samps
 
-                    ind, lat, lon = get_ind_lat_lon(Exp_array,
-                                                    DATA_DIR,
-                                                    data_source = cal,
-                                                    warming_level = warm,
-                                                    ssp = ssp,
-                                                    vp1 = vuln1,
-                                                    vp2 = vuln2)
-                    # Loop over decision parameters
-                    for x in X_n:
-                        # Extract decision parameters
-                        # Columns of X are:
-                        # cost_per_day, d2_1, d2_2, d3_1, d3_2
-                        cost_per_day = x[0]
-                        dec_attributes = np.array([[0, 0, 5],
-                                                   [x[1], x[2], 6],
-                                                   [x[3], x[4], 4]])
+    # Calculate the Y_e values
+    for i in range(N):
+        if(i%100 == 0): print(i)
+        Y_e = calc_Ye(
+                    index=lon_ind,
+                    ind=ind,
+                    input_data_path=DATA_DIR,
+                    risk_inputs=[r[i] for r in risk_samples],
+                    decision_inputs=[DC_samples[i],AC_samps[i],E_samps[i]]
+        )
+        Y_e_samples[d,i] = Y_e
+    
+    # average over samples -> expected loss marginalizing epistemic uncertainty
+    expected_losses[d] = np.mean(Y_e_samples[d,:])
 
-                        # Find costs and utilities in London
-                        # I think that lon_util_fin are the 1000 Y_e(a) values (3 rows x 1000)
-                        lon_optdec, lon_exp_util, lon_util_fin, lon_cost = decision_single_cell(
-                            ind = ind,
-                            index = lon_ind,
-                            EAI = EAI_array,
-                            Exp = Exp_array,
-                            nd = nd,
-                            decision_inputs = dec_attributes,
-                            cost_per_day = cost_per_day
-                        )
+print("Expected losses (10^6 pounds):", expected_losses / 1e6)
 
-                        # Add lon_exp_util
-                        lon_exp_utils.append(lon_exp_util)
-                        # Record all input variables
-                        X_samples.append([
-                            ssp,
-                            warm,
-                            cal,
-                            vuln1,
-                            vuln2,
-                            x[0],
-                            x[1],
-                            x[2],
-                            x[3],
-                            x[4]
-                        ])
+# Plot histograms of expected losses
+plt.hist(Y_e_samples[0,:], bins=50, alpha=0.5, label='Do nothing')
+plt.hist(Y_e_samples[1,:], bins=50, alpha=0.5, label='Modify working hours')
+plt.hist(Y_e_samples[2,:], bins=50, alpha=0.5, label='Buy cooling equipment')
+plt.legend()
+plt.show()
 
-# 32400 rows x 3 columns
-lon_exp_util = np.array(lon_exp_utils)
-expected_utilities_uncertain = np.mean(lon_exp_util, axis = 0)
-#32400 rows x 10 columns
-X_samples = np.array(X_samples)
+# # Loop over all combinations of risk x decision options
+# lon_exp_utils = []
+# X_samples = []
+# # Loop over risk parameters
+# for ssp in ssp_opts:
+#     for warm in warming_opts:
+#         # Exposure depends on SSP and SSP year (which comes from warming level)
+#         # Get SSP year to use based on warming level
+#         if warm == "2deg":
+#             ssp_year = 2041
+#         else:
+#             ssp_year = 2084
+#         # Get array of exposure in each cell
+#         Exp_array = get_Exp(input_data_path = DATA_DIR,
+#                             ssp = ssp,
+#                             ssp_year = ssp_year)
+#         for cal in calibration_opts:
+#             for vuln1 in vuln1_opts:
+#                 for vuln2 in vuln2_opts:
+#                     # String of risk inputs
+#                     risk_input_string = 'ssp'+ssp+'_'+warm+'_'+cal+'_v1_'+vuln1+'_v2_'+vuln2
+#                     print(risk_input_string)
+
+#                     # Get array of EAI
+#                     # 1000 samples in each cell
+#                     # 1000 samples from f(theta | risk inputs)
+#                     EAI_array = get_EAI(input_data_path = DATA_DIR,
+#                                         data_source = cal,
+#                                         warming_level = warm,
+#                                         ssp = ssp,
+#                                         vp1 = vuln1,
+#                                         vp2 = vuln2)
+
+#                     ind, lat, lon = get_ind_lat_lon(Exp_array,
+#                                                     DATA_DIR,
+#                                                     data_source = cal,
+#                                                     warming_level = warm,
+#                                                     ssp = ssp,
+#                                                     vp1 = vuln1,
+#                                                     vp2 = vuln2)
+#                     # Loop over decision parameters
+#                     for x in X_n:
+#                         # Extract decision parameters
+#                         # Columns of X are:
+#                         # cost_per_day, d2_1, d2_2, d3_1, d3_2
+#                         cost_per_day = x[0]
+#                         dec_attributes = np.array([[0, 0, 5],
+#                                                    [x[1], x[2], 6],
+#                                                    [x[3], x[4], 4]])
+
+#                         # Find costs and utilities in London
+#                         # I think that lon_util_fin are the 1000 Y_e(a) values (3 rows x 1000)
+#                         lon_optdec, lon_exp_util, lon_util_fin, lon_cost = decision_single_cell(
+#                             ind = ind,
+#                             index = lon_ind,
+#                             EAI = EAI_array,
+#                             Exp = Exp_array,
+#                             nd = nd,
+#                             decision_inputs = dec_attributes,
+#                             cost_per_day = cost_per_day
+#                         )
+
+#                         # Add lon_exp_util
+#                         lon_exp_utils.append(lon_exp_util)
+#                         # Record all input variables
+#                         X_samples.append([
+#                             ssp,
+#                             warm,
+#                             cal,
+#                             vuln1,
+#                             vuln2,
+#                             x[0],
+#                             x[1],
+#                             x[2],
+#                             x[3],
+#                             x[4]
+#                         ])
+
+# # 32400 rows x 3 columns
+# lon_exp_util = np.array(lon_exp_utils)
+# expected_utilities_uncertain = np.mean(lon_exp_util, axis = 0)
+# #32400 rows x 10 columns
+# X_samples = np.array(X_samples)
 
 # Plot London utilities for the 3 decisions
 # Histograms of cost for the 3 decisions
@@ -197,6 +267,6 @@ optimal_decision_uncertain = np.argmax(expected_utilities_uncertain) # decision 
 N = 500
 n = 200
 SSP_samples = random.choices(ssp_opts, k=N)
-for n in range(500):
-    for d in range(nd):
+# for n in range(500):
+#     for d in range(nd):
         
