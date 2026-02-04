@@ -3,6 +3,7 @@ presentations/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+idealised_example/__pycache__/*
 *.py[codz]
 *$py.class
 
