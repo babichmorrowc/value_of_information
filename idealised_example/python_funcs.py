@@ -96,10 +96,6 @@ def calc_Ye(
     return Y_e
 
 
-    
-    
-    
-
 # Function to find decision in a single cell
 def decision_single_cell(ind,
          index,
@@ -120,7 +116,6 @@ def decision_single_cell(ind,
     if ppl <= 0:
         opd[0] = 1
         exp_util = np.full(nd, np.nan)
-        util_scores = np.full((nd, 1000), np.nan)
         cost = np.full((nd, 1000), np.nan)
     # If there is exposure, find the Bayes optimal decision
     else:
