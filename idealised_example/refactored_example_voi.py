@@ -2,6 +2,7 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+import time
 
 os.chdir('./idealised_example')
 from python_funcs import *
@@ -66,8 +67,61 @@ ind, lat, lon = get_ind_lat_lon(Exp_array,
                                 vp1 = vuln1_opts[0],
                                 vp2 = vuln2_opts[0])
 
+# ---- Sanity checking ----
+# Let's look at the optimal decision in every location under uncertainty
+# We will loop over each location and sample from the risk and decision input distributions to get a distribution of Y_e for each decision, then find the optimal decision under uncertainty (the one with lowest expected Y_e) and see how it varies across locations. This is just to check that we are getting different optimal decisions in different locations, and that the optimal decision is not always the same across all locations (which would make VoI less interesting).
+# Plot the 1650 - 1660 to see where we are
+plot_index(range(1650, 1660), lat, lon)
+plt.show()
+
+opt_dec_locs = []
+for idx in range(1711): # just looking at the first 10 locations for now
+    N_samples = 100
+    Y_e_samples = np.empty((nd, N_samples))
+    risk_samples = [
+        np.random.choice(calibration_opts, size=N_samples, replace=True),
+        np.random.choice(warming_opts, size=N_samples, replace=True),
+        np.random.choice(ssp_opts, size=N_samples, replace=True),
+        np.random.choice(vuln1_opts, size=N_samples, replace=True),
+        np.random.choice(vuln2_opts, size=N_samples, replace=True)
+    ]
+    DC_samples = np.random.uniform(low=100, high=300, size=N_samples)
+    
+    for d in range(nd):
+        AC_samps = np.random.uniform(low=AC_lows[d], high=AC_highs[d], size=N_samples)
+        E_samps = np.random.uniform(low=E_lows[d], high=E_highs[d], size=N_samples)
+        
+        for i in range(N_samples):
+            Y_e_samples[d,i] = calc_Ye(
+                index = idx,
+                ind = ind,
+                input_data_path = DATA_DIR,
+                risk_inputs = [risk_samples[j][i] for j in range(5)],
+                decision_inputs = [DC_samples[i], AC_samps[i], E_samps[i]]
+            )
+    expected_losses = np.mean(Y_e_samples, axis=1)
+    optimal_decision_uncertain = np.argmin(expected_losses)
+    opt_dec_locs.append((idx, optimal_decision_uncertain + 1))
+    print(f"Location index: {idx}, Optimal decision under uncertainty: d{optimal_decision_uncertain + 1}")
+
+# Plot the optimal decision under uncertainty on the map for all locations
+fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+# Plot decision 1 in blue, decision 2 in orange, decision 3 in green
+for d in range(nd):
+    dec_indices = [idx for idx, opt_dec in opt_dec_locs if opt_dec == d+1]
+    ax.scatter(lon[dec_indices], lat[dec_indices], s=12, label=f'd{d+1}')
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
+ax.set_title('Optimal Decision under Uncertainty across Locations')
+ax.legend()
+plt.show()
+
+opt_dec_locs[1460]
+plot_index(1460, lat, lon)
+plt.show()
+
 # ---- Function for VoI analysis ----
-def calculate_expected_loss_given_DC_and_decision(DC_val, decision_idx, n_samples):
+def calculate_expected_loss_given_DC_and_decision(loc_ind, DC_val, decision_idx, n_samples):
     Y_e_samps_inner = np.empty(n_samples)
     inner_risk_samples = [
         np.random.choice(calibration_opts, size=n_samples, replace=True),
@@ -131,6 +185,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
         expected_losses[d] = np.mean(Y_e_samples[d, :])
 
     expected_utilities_uncertain = -expected_losses
+    std_utilities_uncertain = np.std(-Y_e_samples, axis=1)
     optimal_decision_uncertain = np.argmax(expected_utilities_uncertain)
 
     # 3. Calculate VoI for DC
@@ -145,7 +200,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
             
         utilities_for_this_dc = []
         for decision_idx in range(nd):
-            exp_loss = calculate_expected_loss_given_DC_and_decision(dc_val, decision_idx, n_voi_samples)
+            exp_loss = calculate_expected_loss_given_DC_and_decision(loc_ind, dc_val, decision_idx, n_voi_samples)
             utilities_for_this_dc.append(-exp_loss)
         
         optimal_utility = max(utilities_for_this_dc)
@@ -157,6 +212,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
         utilities_with_perfect_info.append(optimal_utility)
 
     expected_utility_perfect_info = np.mean(utilities_with_perfect_info)
+    std_utility_perfect_info = np.std(utilities_with_perfect_info)
     DC_DC = decision_changes / n_voi_samples
     value_of_perfect_information_DC = expected_utility_perfect_info - expected_utilities_uncertain[optimal_decision_uncertain]
     
@@ -167,10 +223,12 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
         'expected_losses': expected_losses,
         'Y_e_samples': Y_e_samples,
         'expected_utilities_uncertain': expected_utilities_uncertain,
+        'std_utilities_uncertain': std_utilities_uncertain,
         'optimal_decision_uncertain': optimal_decision_uncertain,
         'voi_metrics': {
             'utilities_with_perfect_info': utilities_with_perfect_info,
             'expected_utility_perfect_info': expected_utility_perfect_info,
+            'std_utility_perfect_info': std_utility_perfect_info,
             'probability_of_decision_change': DC_DC,
             'value_of_perfect_information_DC': value_of_perfect_information_DC
         },
@@ -189,12 +247,6 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
 
     return results_dict
 
-# Let us test this out on London:
-loc_name = "London"
-loc_ind = 241
-
-loc_results = run_location_analysis(loc_name, loc_ind)
-
 # Function to generate and save plots and summary statistics for a location given the results dictionary
 def generate_location_summary_and_plots(loc_results):
     loc_name = loc_results['location_name']
@@ -209,6 +261,7 @@ def generate_location_summary_and_plots(loc_results):
     plt.figure(figsize=(12, 6))
     for d in range(nd):
         plt.hist(loc_results['Y_e_samples'][d, :], bins=30, alpha=0.5, label=f'Decision {d+1}')
+        plt.axvline(loc_results['expected_losses'][d], color=['blue', 'orange', 'green'][d], linestyle='--', label=f'Expected Loss d{d+1}' if d == 0 else None)
     plt.xlabel('Expected Loss (Y_e)')
     plt.ylabel('Frequency')
     plt.title(f'Histogram of Expected Losses for {loc_name}')
@@ -267,9 +320,9 @@ def generate_location_summary_and_plots(loc_results):
     plt.show()
 
     # Expected utility of the optimal decision under uncertainty:
-    print(f"Expected utility of optimal decision under uncertainty for {loc_name}: {loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
+    print(f"Expected utility of optimal decision under uncertainty for {loc_name}:{loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f} ± {loc_results['std_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
     # Expected utility with perfect information about DC:
-    print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info']:.2f}")
+    print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info']:.2f} ± {loc_results['voi_metrics']['std_utility_perfect_info']:.2f}")
     # Show the value of information for DC:
     print(f"Value of perfect information for DC in {loc_name}: {loc_results['voi_metrics']['value_of_perfect_information_DC'] / 1e6:.2f} million")
 
@@ -288,7 +341,42 @@ def generate_location_summary_and_plots(loc_results):
     # Show the probability of decision change with perfect information about DC:
     print(f"Probability of decision change with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['probability_of_decision_change']:.2%}")
 
+# Let us test this out on London:
+lon_name = "London"
+lon_ind = 241
+# timer_start = time.time()
+# lon_results = run_location_analysis(lon_name, lon_ind, 10000, 1000)
+# timer_end = time.time()
+# print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
 # Read in London results
-lon_results = np.load(f"./results/voi_results_{loc_name.replace(' ', '_')}_{loc_ind}.npy", allow_pickle=True).item()
+lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(lon_results)
 
+# Get percentage breakdown of the 3 decisions chosen under uncertainty in London
+# Y_e_samples has shape (nd, base_N)    
+decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
+decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
+
+# Now let's try the Lake District
+ld_name = "Lake District"
+ld_ind = 1058
+# timer_start = time.time()
+# ld_results = run_location_analysis(ld_name, ld_ind, 10000, 1000)
+# timer_end = time.time()
+# print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# Read in Lake District results
+ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
+generate_location_summary_and_plots(ld_results)
+
+# Get percentage breakdown of the 3 decisions chosen under uncertainty in the Lake District
+decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
+decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
+
+# Location in Scotland where d2 was optimal under uncertainty
+scot_name = "Scotland"
+scot_ind = 1460
+timer_start = time.time()
+scot_results = run_location_analysis(scot_name, scot_ind, 10000, 100)
+timer_end = time.time()
+print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
+generate_location_summary_and_plots(scot_results)

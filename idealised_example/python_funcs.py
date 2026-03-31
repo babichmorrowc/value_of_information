@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
 from netCDF4 import Dataset
 import cftime
 
@@ -141,3 +143,15 @@ def decision_single_cell(ind,
 
     # Return: optimal decision, expected utility, utility scores, cost
     return opd, exp_util, util_cost, cost
+
+# Function to plot the location given an index
+def plot_index(index, lat, lon):
+    fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+    # Plot all points in grey
+    ax.scatter(lon, lat, c="grey", s=12)
+    # Subset to desired index
+    ax.scatter(lon[index], lat[index], c="red", s=12)
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.coastlines()
+    return fig
