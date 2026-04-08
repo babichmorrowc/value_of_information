@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import time
+from sklearn.ensemble import RandomForestRegressor
 
 os.chdir('./idealised_example')
 from python_funcs import *
@@ -121,30 +122,48 @@ plot_index(1460, lat, lon)
 plt.show()
 
 # ---- Function for VoI analysis ----
-def calculate_expected_loss_given_DC_and_decision(loc_ind, DC_val, decision_idx, n_samples):
-    Y_e_samps_inner = np.empty(n_samples)
-    inner_risk_samples = [
-        np.random.choice(calibration_opts, size=n_samples, replace=True),
-        np.random.choice(warming_opts, size=n_samples, replace=True),
-        np.random.choice(ssp_opts, size=n_samples, replace=True),
-        np.random.choice(vuln1_opts, size=n_samples, replace=True),
-        np.random.choice(vuln2_opts, size=n_samples, replace=True)
-    ]
-    inner_AC_samps = np.random.uniform(low=AC_lows[decision_idx], high=AC_highs[decision_idx], size=n_samples)
-    inner_E_samps = np.random.uniform(low=E_lows[decision_idx], high=E_highs[decision_idx], size=n_samples)
+def calculate_evppi(parameter_samples, losses_matrix, optimal_decision_uncertain, n_estimators=50):
+    """
+    Calculates EVPPI using a Random Forest Regressor.
+    parameter_samples: 1D array (N,) of the parameter we are 'learning'
+    losses_matrix: 2D array (N, 3) of the Y_e values for each decision
+    """
+    N, n_decisions = losses_matrix.shape
+    # To store E[Loss | Parameter] for each decision
+    predicted_expected_losses = np.zeros((N, n_decisions))
     
-    for i in range(n_samples):
-        Y_e_samps_inner[i] = calc_Ye(
-                    index=loc_ind,
-                    ind=ind,
-                    input_data_path=DATA_DIR,
-                    risk_inputs=[r[i] for r in inner_risk_samples],
-                    decision_inputs=[DC_val, inner_AC_samps[i], inner_E_samps[i]]
-        )
-    return np.mean(Y_e_samps_inner)
+    # Reshape X for sklearn: (N,) -> (N, 1)
+    X = parameter_samples.reshape(-1, 1)
+    
+    # 1. Fit regression for each decision
+    for d in range(n_decisions):
+        # Shallow Random Forest to prevent overfitting
+        model = RandomForestRegressor(n_estimators=n_estimators, max_depth=4, random_state=42)
+        model.fit(X, losses_matrix[:, d])
+        predicted_expected_losses[:, d] = model.predict(X)
+    
+    # 2. Determine the optimal decision for EACH sample given perfect info
+    # We take the index of the minimum predicted loss
+    optimal_decisions_perfect_info = np.argmin(predicted_expected_losses, axis=1)
+    utilities_perfect_info = -predicted_expected_losses[np.arange(N), optimal_decisions_perfect_info]
+    # Calculate mean utility for the EVPPI check
+    expected_utility_perfect_info = np.mean(utilities_perfect_info)
+
+    # 3. Calculate Probability of Decision Change
+    # Count how many times the info changed the optimal decision
+    num_changes = np.sum(optimal_decisions_perfect_info != optimal_decision_uncertain)
+    prob_change = num_changes / N
+
+    # 4. Calculate EVPPI
+    avg_losses = np.mean(losses_matrix, axis=0)
+    best_avg_loss = np.min(avg_losses)
+    expected_loss_perfect_info = np.mean(np.min(predicted_expected_losses, axis=1))
+    evppi = best_avg_loss - expected_loss_perfect_info
+    
+    return evppi, expected_utility_perfect_info, prob_change, utilities_perfect_info
 
 # ------ Function to run the VoI analysis for a single location ------
-def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100):
+def run_location_analysis(loc_name, loc_ind, base_N = 1000):
     print(f"Running analysis for {loc_name} (Index: {loc_ind})...")
 
     # 1. Set-up the sampling
@@ -188,34 +207,13 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
     std_utilities_uncertain = np.std(-Y_e_samples, axis=1)
     optimal_decision_uncertain = np.argmax(expected_utilities_uncertain)
 
-    # 3. Calculate VoI for DC
-    print("Calculating VoI for DC...")
-    DC_voi_samples = DC_samples[:n_voi_samples]
-    utilities_with_perfect_info = []
-    decision_changes = 0
+    # 3. Calculate VoI for all parameters
+    print("Calculating EVPPI using random forest regression...")
+    losses_matrix = Y_e_samples.T # shape (base_N, nd)
 
-    for idx, dc_val in enumerate(DC_voi_samples):
-        if idx > 0 and idx % 10 == 0: 
-            print(f"VoI progress: {idx}/{n_voi_samples}")
-            
-        utilities_for_this_dc = []
-        for decision_idx in range(nd):
-            exp_loss = calculate_expected_loss_given_DC_and_decision(loc_ind, dc_val, decision_idx, n_voi_samples)
-            utilities_for_this_dc.append(-exp_loss)
-        
-        optimal_utility = max(utilities_for_this_dc)
-        optimal_decision_for_dc = np.argmax(utilities_for_this_dc)
-        
-        if optimal_decision_for_dc != optimal_decision_uncertain:
-            decision_changes += 1
-            
-        utilities_with_perfect_info.append(optimal_utility)
+    # Just start with DC for now to check
+    voi_dc, expected_utility_perfect_info_dc,prob_change_dc, utilities_perfect_info_dc = calculate_evppi(DC_samples, losses_matrix, optimal_decision_uncertain)
 
-    expected_utility_perfect_info = np.mean(utilities_with_perfect_info)
-    std_utility_perfect_info = np.std(utilities_with_perfect_info)
-    DC_DC = decision_changes / n_voi_samples
-    value_of_perfect_information_DC = expected_utility_perfect_info - expected_utilities_uncertain[optimal_decision_uncertain]
-    
     # Save results
     results_dict = {
         'location_name': loc_name,
@@ -226,11 +224,10 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, n_voi_samples = 100)
         'std_utilities_uncertain': std_utilities_uncertain,
         'optimal_decision_uncertain': optimal_decision_uncertain,
         'voi_metrics': {
-            'utilities_with_perfect_info': utilities_with_perfect_info,
-            'expected_utility_perfect_info': expected_utility_perfect_info,
-            'std_utility_perfect_info': std_utility_perfect_info,
-            'probability_of_decision_change': DC_DC,
-            'value_of_perfect_information_DC': value_of_perfect_information_DC
+            'voi_DC': voi_dc,
+            'expected_utility_perfect_info_DC': expected_utility_perfect_info_dc,
+            'utilities_with_perfect_info_DC': utilities_perfect_info_dc,
+            'dc_DC': prob_change_dc
         },
         'inputs': {
             'risk_samples': risk_samples,
@@ -320,17 +317,19 @@ def generate_location_summary_and_plots(loc_results):
     plt.show()
 
     # Expected utility of the optimal decision under uncertainty:
-    print(f"Expected utility of optimal decision under uncertainty for {loc_name}:{loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f} ± {loc_results['std_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
+    # print(f"Expected utility of optimal decision under uncertainty for {loc_name}:{loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f} ± {loc_results['std_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
+    print(f"Expected utility of optimal decision under uncertainty for {loc_name}: {loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
     # Expected utility with perfect information about DC:
-    print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info']:.2f} ± {loc_results['voi_metrics']['std_utility_perfect_info']:.2f}")
+    # print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info']:.2f} ± {loc_results['voi_metrics']['std_utility_perfect_info']:.2f}")
+    print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info_DC']:.2f}")
     # Show the value of information for DC:
-    print(f"Value of perfect information for DC in {loc_name}: {loc_results['voi_metrics']['value_of_perfect_information_DC'] / 1e6:.2f} million")
+    print(f"Value of perfect information for DC in {loc_name}: {loc_results['voi_metrics']['voi_DC'] / 1e6:.2f} million")
 
-    # Plot distribution of utilities with perfect information about DC
+    # Plot distribution of regression predictions
     plt.figure(figsize=(10, 6))
-    plt.hist(loc_results['voi_metrics']['utilities_with_perfect_info'], bins=30, alpha=0.7, label='Utilities with Perfect Info about DC')
+    plt.hist(loc_results['voi_metrics']['utilities_with_perfect_info_DC'], bins=30, alpha=0.7, label='Utilities with Perfect Info about DC')
     plt.axvline(loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']], color='red', linestyle='--', label='Expected Utility under Uncertainty')
-    plt.axvline(loc_results['voi_metrics']['expected_utility_perfect_info'], color='green', linestyle='--', label='Expected Utility with Perfect Info')
+    plt.axvline(loc_results['voi_metrics']['expected_utility_perfect_info_DC'], color='green', linestyle='--', label='Expected Utility with Perfect Info')
     plt.xlabel('Utility')
     plt.ylabel('Frequency')
     plt.title(f'Distribution of Utilities with Perfect Information about DC for {loc_name}')
@@ -339,15 +338,16 @@ def generate_location_summary_and_plots(loc_results):
     plt.show() 
 
     # Show the probability of decision change with perfect information about DC:
-    print(f"Probability of decision change with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['probability_of_decision_change']:.2%}")
+    print(f"Probability of decision change with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['dc_DC']:.2%}")
 
 # Let us test this out on London:
 lon_name = "London"
 lon_ind = 241
-# timer_start = time.time()
-# lon_results = run_location_analysis(lon_name, lon_ind, 10000, 1000)
-# timer_end = time.time()
-# print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+timer_start = time.time()
+lon_results = run_location_analysis(lon_name, lon_ind, 10000)
+timer_end = time.time()
+print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# 12.73 minutes for 10000 samples
 # Read in London results
 lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(lon_results)
@@ -360,10 +360,10 @@ decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
 # Now let's try the Lake District
 ld_name = "Lake District"
 ld_ind = 1058
-# timer_start = time.time()
-# ld_results = run_location_analysis(ld_name, ld_ind, 10000, 1000)
-# timer_end = time.time()
-# print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+timer_start = time.time()
+ld_results = run_location_analysis(ld_name, ld_ind, 10000)
+timer_end = time.time()
+print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
 # Read in Lake District results
 ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(ld_results)
@@ -376,7 +376,9 @@ decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
 scot_name = "Scotland"
 scot_ind = 1460
 timer_start = time.time()
-scot_results = run_location_analysis(scot_name, scot_ind, 10000, 100)
+scot_results = run_location_analysis(scot_name, scot_ind, 10000)
 timer_end = time.time()
-print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
+# print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
+# Read in Scotland results
+scot_results = np.load(f"./results/voi_results_{scot_name.replace(' ', '_')}_{scot_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(scot_results)

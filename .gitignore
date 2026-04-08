@@ -1,9 +1,13 @@
 # Folder of presentation pdfs
 presentations/
 
+# Folders of outputs
+idealised_example/results
+idealised_example/figures
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
-idealised_example/__pycache__/*
+idealised_example/__pycache__/
 *.py[codz]
 *$py.class
 
