@@ -171,6 +171,18 @@ def calculate_evppi(parameter_samples, losses_matrix, optimal_decision_uncertain
 def run_location_analysis(loc_name, loc_ind, base_N = 1000):
     print(f"Running analysis for {loc_name} (Index: {loc_ind})...")
 
+    # Get EAI and exposure samples for this location across all risk input combinations
+    EAI_Exp_samples = get_EAI_Exp_bundle(
+        index = loc_ind,
+        ind = ind,
+        input_data_path = DATA_DIR,
+        calibration_opts = calibration_opts,
+        warming_level_opts = warming_opts,
+        ssp_opts = ssp_opts,
+        vuln_param_1_opts = vuln1_opts,
+        vuln_param_2_opts = vuln2_opts
+    )
+
     # 1. Set-up the sampling
     Y_e_samples = np.empty((nd, base_N))
     AC_samples = np.empty((nd, base_N))
@@ -197,13 +209,17 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000):
         E_samples[d] = E_samps
         
         for i in range(base_N):
-            Y_e_samples[d,i] = calc_Ye(
-                index = loc_ind,
-                ind = ind,
-                input_data_path = DATA_DIR,
-                risk_inputs = [risk_samples[j][i] for j in range(5)],
-                decision_inputs = [DC_samples[i], AC_samps[i], E_samps[i]]
-            )
+            # Get the EAI and exposure samples for this combination of risk inputs
+            key = (risk_samples[0][i], risk_samples[1][i], risk_samples[2][i], risk_samples[3][i], risk_samples[4][i])
+            EAI_Exp = EAI_Exp_samples[key]
+            Y_e_samples[d,i] = calc_Ye_jit(EAI_Exp, [DC_samples[i], AC_samps[i], E_samps[i]])
+            # Y_e_samples[d,i] = calc_Ye(
+            #     index = loc_ind,
+            #     ind = ind,
+            #     input_data_path = DATA_DIR,
+            #     risk_inputs = [risk_samples[j][i] for j in range(5)],
+            #     decision_inputs = [DC_samples[i], AC_samps[i], E_samps[i]]
+            # )
 
         # Calculate the epistemic loss marginalizing epistemic uncertainty
         expected_losses[d] = np.mean(Y_e_samples[d, :])
@@ -348,27 +364,6 @@ def generate_location_summary_and_plots(loc_results):
         print(f"Value of perfect information for {input_name} in {loc_name}: {metrics['voi'] / 1e6:.2f} million")
         print(f"Probability of decision change with perfect information about {input_name} for {loc_name}: {metrics['prob_change']:.2%}")
     
-    # # Expected utility with perfect information about DC:
-    # # print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info']:.2f} ± {loc_results['voi_metrics']['std_utility_perfect_info']:.2f}")
-    # print(f"Expected utility with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['expected_utility_perfect_info_DC']:.2f}")
-    # # Show the value of information for DC:
-    # print(f"Value of perfect information for DC in {loc_name}: {loc_results['voi_metrics']['voi_DC'] / 1e6:.2f} million")
-
-    # Plot distribution of regression predictions
-    # plt.figure(figsize=(10, 6))
-    # plt.hist(loc_results['voi_metrics']['utilities_with_perfect_info_DC'], bins=30, alpha=0.7, label='Utilities with Perfect Info about DC')
-    # plt.axvline(loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']], color='red', linestyle='--', label='Expected Utility under Uncertainty')
-    # plt.axvline(loc_results['voi_metrics']['expected_utility_perfect_info_DC'], color='green', linestyle='--', label='Expected Utility with Perfect Info')
-    # plt.xlabel('Utility')
-    # plt.ylabel('Frequency')
-    # plt.title(f'Distribution of Utilities with Perfect Information about DC for {loc_name}')
-    # plt.legend()
-    # plt.savefig(f"./figures/voi_utilities_DC_{loc_name.replace(' ', '_')}_{loc_results['location_index']}.png")
-    # plt.show() 
-
-    # Show the probability of decision change with perfect information about DC:
-    # print(f"Probability of decision change with perfect information about DC for {loc_name}: {loc_results['voi_metrics']['dc_DC']:.2%}")
-
 # Let us test this out on London:
 lon_name = "London"
 lon_ind = 241
@@ -376,9 +371,9 @@ timer_start = time.time()
 lon_results = run_location_analysis(lon_name, lon_ind, 10000)
 timer_end = time.time()
 print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
-# 12.8 minutes for 10000 samples
+# 0.14 minutes for 10000 samples
 # Read in London results
-# lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
+lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(lon_results)
 
 # Get percentage breakdown of the 3 decisions chosen under uncertainty in London
@@ -387,12 +382,12 @@ decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
 decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
 
 # Now let's try the Lake District
-ld_name = "Lake District"
-ld_ind = 1058
-timer_start = time.time()
-ld_results = run_location_analysis(ld_name, ld_ind, 10000)
-timer_end = time.time()
-print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# ld_name = "Lake District"
+# ld_ind = 1058
+# timer_start = time.time()
+# ld_results = run_location_analysis(ld_name, ld_ind, 10000)
+# timer_end = time.time()
+# print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
 # Read in Lake District results
 ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(ld_results)
@@ -402,12 +397,12 @@ decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
 decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
 
 # Location in Scotland where d2 was optimal under uncertainty
-scot_name = "Scotland"
-scot_ind = 1460
-timer_start = time.time()
-scot_results = run_location_analysis(scot_name, scot_ind, 10000)
-timer_end = time.time()
-print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
+# scot_name = "Scotland"
+# scot_ind = 1460
+# timer_start = time.time()
+# scot_results = run_location_analysis(scot_name, scot_ind, 10000)
+# timer_end = time.time()
+# print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
 # Read in Scotland results
 scot_results = np.load(f"./results/voi_results_{scot_name.replace(' ', '_')}_{scot_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(scot_results)
