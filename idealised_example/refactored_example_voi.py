@@ -168,7 +168,7 @@ def calculate_evppi(parameter_samples, losses_matrix, optimal_decision_uncertain
     return evppi, expected_utility_perfect_info, prob_change, utilities_perfect_info
 
 # ------ Function to run the VoI analysis for a single location ------
-def run_location_analysis(loc_name, loc_ind, base_N = 1000):
+def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
     print(f"Running analysis for {loc_name} (Index: {loc_ind})...")
 
     # Get EAI and exposure samples for this location across all risk input combinations
@@ -213,13 +213,6 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000):
             key = (risk_samples[0][i], risk_samples[1][i], risk_samples[2][i], risk_samples[3][i], risk_samples[4][i])
             EAI_Exp = EAI_Exp_samples[key]
             Y_e_samples[d,i] = calc_Ye_jit(EAI_Exp, [DC_samples[i], AC_samps[i], E_samps[i]])
-            # Y_e_samples[d,i] = calc_Ye(
-            #     index = loc_ind,
-            #     ind = ind,
-            #     input_data_path = DATA_DIR,
-            #     risk_inputs = [risk_samples[j][i] for j in range(5)],
-            #     decision_inputs = [DC_samples[i], AC_samps[i], E_samps[i]]
-            # )
 
         # Calculate the epistemic loss marginalizing epistemic uncertainty
         expected_losses[d] = np.mean(Y_e_samples[d, :])
@@ -272,9 +265,10 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000):
     }
 
     # Save results to a file
-    output_path = f"./results/voi_results_{loc_name.replace(' ', '_')}_{loc_ind}.npy"
-    np.save(output_path, results_dict)
-    print(f"Analysis for {loc_name} completed. Results saved to {output_path}.")
+    if save_file:
+        output_path = f"./results/voi_results_{loc_name.replace(' ', '_')}_{loc_ind}.npy"
+        np.save(output_path, results_dict)
+        print(f"Analysis for {loc_name} completed. Results saved to {output_path}.")
 
     return results_dict
 
@@ -406,3 +400,18 @@ decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
 # Read in Scotland results
 scot_results = np.load(f"./results/voi_results_{scot_name.replace(' ', '_')}_{scot_ind}.npy", allow_pickle=True).item()
 generate_location_summary_and_plots(scot_results)
+
+# Loop over all locations
+all_loc_results = {}
+for loc_ind in range(1711):
+    print(loc_ind)
+    loc_name = f"Location_{loc_ind}"
+    loc_results = run_location_analysis(loc_name, loc_ind, 10000, save_file=False)
+    all_loc_results[loc_name] = loc_results
+# Save all results
+np.save("./results/voi_results_all_locations.npy", all_loc_results)
+
+# Plot results for a single location to check
+loc_name = f"Location_{1000}"
+loc_results = all_loc_results[loc_name]
+generate_location_summary_and_plots(loc_results)
