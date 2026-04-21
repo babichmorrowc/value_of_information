@@ -236,7 +236,6 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
         'AC_d3': AC_samples[2],
         'E_d3': E_samples[2]
     }
-    # For all inputs, calculate VoI
     voi_metrics = {}
     for input_name, samples in input_samples.items():
         voi, expected_utility_perfect_info, prob_change, utilities_with_perfect_info = calculate_evppi(samples, losses_matrix, optimal_decision_uncertain)
@@ -358,60 +357,169 @@ def generate_location_summary_and_plots(loc_results):
         print(f"Value of perfect information for {input_name} in {loc_name}: {metrics['voi'] / 1e6:.2f} million")
         print(f"Probability of decision change with perfect information about {input_name} for {loc_name}: {metrics['prob_change']:.2%}")
     
-# Let us test this out on London:
-lon_name = "London"
-lon_ind = 241
-timer_start = time.time()
-lon_results = run_location_analysis(lon_name, lon_ind, 10000)
-timer_end = time.time()
-print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
-# 0.14 minutes for 10000 samples
-# Read in London results
-lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
-generate_location_summary_and_plots(lon_results)
-
-# Get percentage breakdown of the 3 decisions chosen under uncertainty in London
-# Y_e_samples has shape (nd, base_N)    
-decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
-decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
-
-# Now let's try the Lake District
-# ld_name = "Lake District"
-# ld_ind = 1058
+# # Let us test this out on London:
+# lon_name = "London"
+# lon_ind = 241
 # timer_start = time.time()
-# ld_results = run_location_analysis(ld_name, ld_ind, 10000)
+# lon_results = run_location_analysis(lon_name, lon_ind, 10000)
 # timer_end = time.time()
-# print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
-# Read in Lake District results
-ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
-generate_location_summary_and_plots(ld_results)
+# print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# # 0.14 minutes for 10000 samples
+# # Read in London results
+# lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
+# generate_location_summary_and_plots(lon_results)
 
-# Get percentage breakdown of the 3 decisions chosen under uncertainty in the Lake District
-decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
-decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
+# # Get percentage breakdown of the 3 decisions chosen under uncertainty in London
+# # Y_e_samples has shape (nd, base_N)    
+# decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
+# decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
 
-# Location in Scotland where d2 was optimal under uncertainty
-# scot_name = "Scotland"
-# scot_ind = 1460
-# timer_start = time.time()
-# scot_results = run_location_analysis(scot_name, scot_ind, 10000)
-# timer_end = time.time()
-# print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
-# Read in Scotland results
-scot_results = np.load(f"./results/voi_results_{scot_name.replace(' ', '_')}_{scot_ind}.npy", allow_pickle=True).item()
-generate_location_summary_and_plots(scot_results)
+# # Now let's try the Lake District
+# # ld_name = "Lake District"
+# # ld_ind = 1058
+# # timer_start = time.time()
+# # ld_results = run_location_analysis(ld_name, ld_ind, 10000)
+# # timer_end = time.time()
+# # print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# # Read in Lake District results
+# ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
+# generate_location_summary_and_plots(ld_results)
 
-# Loop over all locations
-all_loc_results = {}
-for loc_ind in range(1711):
-    print(loc_ind)
-    loc_name = f"Location_{loc_ind}"
-    loc_results = run_location_analysis(loc_name, loc_ind, 10000, save_file=False)
-    all_loc_results[loc_name] = loc_results
-# Save all results
-np.save("./results/voi_results_all_locations.npy", all_loc_results)
+# # Get percentage breakdown of the 3 decisions chosen under uncertainty in the Lake District
+# decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
+# decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
+
+# # Location in Scotland where d2 was optimal under uncertainty
+# # scot_name = "Scotland"
+# # scot_ind = 1460
+# # timer_start = time.time()
+# # scot_results = run_location_analysis(scot_name, scot_ind, 10000)
+# # timer_end = time.time()
+# # print(f"Time taken for VoI analysis of {scot_name}: {(timer_end - timer_start) / 60:.2f} minutes") # 24.98 minutes for 10000, 100
+# # Read in Scotland results
+# scot_results = np.load(f"./results/voi_results_{scot_name.replace(' ', '_')}_{scot_ind}.npy", allow_pickle=True).item()
+# generate_location_summary_and_plots(scot_results)
+
+# # Loop over all locations
+# all_loc_results = {}
+# for loc_ind in range(1711):
+#     print(loc_ind)
+#     loc_name = f"Location_{loc_ind}"
+#     loc_results = run_location_analysis(loc_name, loc_ind, 10000, save_file=False)
+#     all_loc_results[loc_name] = loc_results
+# # Save all results
+# np.save("./results/voi_results_all_locations.npy", all_loc_results)
+all_loc_results = np.load("./results/voi_results_all_locations.npy", allow_pickle=True).item()
 
 # Plot results for a single location to check
-loc_name = f"Location_{1000}"
-loc_results = all_loc_results[loc_name]
-generate_location_summary_and_plots(loc_results)
+# loc_name = f"Location_{1000}"
+# loc_results = all_loc_results[loc_name]
+# generate_location_summary_and_plots(loc_results)
+
+# Plot a map of the optimal decision under uncertainty across all locations
+fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+for d in range(nd):
+    dec_indices = [int(loc_results['location_index']) for loc_name, loc_results in all_loc_results.items() if loc_results['optimal_decision_uncertain'] == d]
+    ax.scatter(lon[dec_indices], lat[dec_indices], s=12, label=f'd{d+1}')
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
+ax.set_title('Optimal Decision under Uncertainty across Locations')
+ax.legend()
+plt.savefig("./figures/voi_optimal_decision_map.png")
+plt.show()
+
+input_sample_keys = ['calibration', 'warming', 'ssp', 'vuln1', 'vuln2', 'DC', 'AC_d2', 'E_d2', 'AC_d3', 'E_d3']
+
+# Plot the VoI for all inputs in a grid of maps
+param_cats = ['Risk', 'Cost per day', 'Decision costs', 'Decision efficacies']
+plot_indices = [
+    (0, 0), (0, 1), (0, 2), (0, 3), (0, 4),
+    (1, 0),                                 
+    (2, 0), (2, 1),                         
+    (3, 0), (3, 1)              
+]
+fig, axes = plt.subplots(5, 5, figsize=(10, 13), subplot_kw={'projection': ccrs.PlateCarree()})
+for i, (row,col) in enumerate(plot_indices):
+    input_name = input_sample_keys[i]
+    ax = axes[row, col]
+    voi_values = [loc_results['voi_metrics'][input_name]['voi'] for loc_name, loc_results in all_loc_results.items()]
+    sc = ax.scatter(lon, lat, c=voi_values, cmap='Blues', s=12, vmin=0, plotnonfinite=True)
+    ax.set_title(X_e_labels[i], fontsize=10)
+    if col == 0:
+        ax.text(-0.07, 0.55, param_cats[row], va='bottom', ha='center',
+                rotation='vertical', rotation_mode='anchor', transform=ax.transAxes, size='x-large')
+        ax.set_ylabel(param_cats[row], fontsize=10)
+    ax.coastlines(color = 'grey', linewidth=0.5)
+fig.colorbar(sc, ax=axes, orientation='vertical', fraction=0.02, pad=0.01, label='Value of Information')
+plt.suptitle('Value of Information', fontsize=12)
+# Hide empty subplots
+for row in range(5):
+    for col in range(5):
+        if (row, col) not in plot_indices:
+            fig.delaxes(axes[row, col])
+plt.savefig("./figures/voi_map_grid.png")
+plt.show()
+
+# for input_index, input_name in enumerate(input_sample_keys):
+#     fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+#     voi_values = [loc_results['voi_metrics'][input_name]['voi'] for loc_name, loc_results in all_loc_results.items()]
+#     sc = ax.scatter(lon, lat, c=voi_values, cmap='Blues', s=12, vmin=0, plotnonfinite=True)
+#     plt.colorbar(sc, label=f'VoI of {X_e_labels[input_index]}')
+#     ax.set_xlabel('Longitude')
+#     ax.set_ylabel('Latitude')
+#     ax.coastlines(color = 'grey')
+#     ax.set_title(f'Value of Information for {X_e_labels[input_index]} across Locations')
+#     # plt.savefig(f"./figures/voi_map_{input_name}.png")
+#     plt.show()
+
+# Plot the probability of decision change for all inputs in a grid of maps
+fig, axes = plt.subplots(5, 5, figsize=(10, 13), subplot_kw={'projection': ccrs.PlateCarree()})
+for i, (row,col) in enumerate(plot_indices):
+    input_name = input_sample_keys[i]
+    ax = axes[row, col]
+    prob_change_values = [loc_results['voi_metrics'][input_name]['prob_change'] for loc_name, loc_results in all_loc_results.items()]
+    sc = ax.scatter(lon, lat, c=prob_change_values, cmap='Reds', s=12, vmin=0, vmax=1, plotnonfinite=True)
+    ax.set_title(X_e_labels[i], fontsize=10)
+    if col == 0:
+        ax.text(-0.07, 0.55, param_cats[row], va='bottom', ha='center',
+                rotation='vertical', rotation_mode='anchor', transform=ax.transAxes, size='x-large')
+        ax.set_ylabel(param_cats[row], fontsize=10)
+    ax.coastlines(color = 'grey', linewidth=0.5)
+fig.colorbar(sc, ax=axes, orientation='vertical', fraction=0.02, pad=0.01, label='Probability of Decision Change')
+plt.suptitle('Probability of Decision Change with Perfect Information', fontsize=12)
+# Hide empty subplots
+for row in range(5):
+    for col in range(5):
+        if (row, col) not in plot_indices:
+            fig.delaxes(axes[row, col])
+plt.savefig("./figures/prob_change_map_grid.png")
+plt.show()
+
+
+# # For each input, plot the probability of decision change across all locations on a map in a grid
+# for input_index, input_name in enumerate(input_sample_keys):
+#     fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+#     prob_change_values = [loc_results['voi_metrics'][input_name]['prob_change'] for loc_name, loc_results in all_loc_results.items()]
+#     sc = ax.scatter(lon, lat, c=prob_change_values, cmap='Reds', s=12)
+#     plt.colorbar(sc, label=f'Probability of Decision Change with Perfect Info about {X_e_labels[input_index]}')
+#     ax.set_xlabel('Longitude')
+#     ax.set_ylabel('Latitude')
+#     ax.coastlines(color = 'grey')
+#     ax.set_title(f'Probability of Decision Change with Perfect Info about {X_e_labels[input_index]} across Locations')
+#     # plt.savefig(f"./figures/prob_change_map_{input_name}.png")
+#     plt.show()
+
+# Investigate locations with very negative VoI for calibration
+calibration_voi_values = [loc_results['voi_metrics']['calibration']['voi'] for loc_name, loc_results in all_loc_results.items()]
+n_negative_calibration_voi = sum(1 for voi in calibration_voi_values if voi < 0)
+print(f"Number of locations with negative VoI for calibration: {n_negative_calibration_voi}")
+# Quite a bit of negatives for this input specifically
+# # Plot locations with negative VoI for calibration in red on the map
+# fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+# for loc_name, loc_results in all_loc_results.items():
+#     if loc_results['voi_metrics']['calibration']['voi'] < 0:
+#         ax.scatter(lon[int(loc_results['location_index'])], lat[int(loc_results['location_index'])], color='red', s=12)
+# ax.set_xlabel('Longitude')
+# ax.set_ylabel('Latitude')
+# ax.set_title('Locations with Negative VoI for Calibration')
+# plt.show()
