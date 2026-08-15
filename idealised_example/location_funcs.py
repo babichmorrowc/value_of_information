@@ -5,6 +5,7 @@ import cartopy.crs as ccrs
 from netCDF4 import Dataset
 import cftime
 from numba import jit
+from pathlib import Path
 
 # Function to plot the location given an index
 def plot_index(index, lat, lon):
@@ -26,8 +27,9 @@ def get_EAI(input_data_path,
             vp1,
             vp2):
     # load in GAM samples of EAI
-    gamsamples_file = input_data_path+data_source+'/GAMsamples_expected_annual_impact_data_'+data_source+'_WL'+warming_level+'_SSP'+ssp+'_vp1='+vp1+'_vp2='+vp2+'.nc'
-    gamsamples = Dataset(gamsamples_file)
+    p = Path(input_data_path)
+    gamsamples_file = p / data_source / f'GAMsamples_expected_annual_impact_data_{data_source}_WL{warming_level}_SSP{ssp}_vp1={vp1}_vp2={vp2}.nc'
+    gamsamples = Dataset(str(gamsamples_file))
     EAI = np.array(gamsamples.variables['sim_annual_impact'])
 
     return EAI
@@ -37,7 +39,8 @@ def get_Exp(input_data_path,
             ssp,
             ssp_year):
     # need the number of ppl in each grid cell to calculate the total cost as input is 'cost per person'
-    exposure_netcdf = Dataset(input_data_path+'UKSSPs/Employment_SSP'+ssp+'_12km_Physical.nc')
+    p = Path(input_data_path)
+    exposure_netcdf = Dataset(str(p / 'UKSSPs' / f'Employment_SSP{ssp}_12km_Physical.nc'))
     units = getattr(exposure_netcdf['time'], 'units')
     calendar = getattr(exposure_netcdf['time'], 'calendar')
     dates = cftime.num2date(exposure_netcdf.variables['time'][:], units, calendar)
@@ -57,8 +60,9 @@ def get_ind_lat_lon(Exp,
                     vp1,
                     vp2):
     # load in GAM samples of EAI
-    gamsamples_file = input_data_path+data_source+'/GAMsamples_expected_annual_impact_data_'+data_source+'_WL'+warming_level+'_SSP'+ssp+'_vp1='+vp1+'_vp2='+vp2+'.nc'
-    gamsamples = Dataset(gamsamples_file)
+    p = Path(input_data_path)
+    gamsamples_file = p / data_source / f'GAMsamples_expected_annual_impact_data_{data_source}_WL{warming_level}_SSP{ssp}_vp1={vp1}_vp2={vp2}.nc'
+    gamsamples = Dataset(str(gamsamples_file))
 
     # find indices of land locations
     ind = np.where(Exp < 9e30)
@@ -108,22 +112,6 @@ def get_EAI_Exp_bundle(
                         EAI_Exp_samples[key] = (EAI_samples, ppl)
     return EAI_Exp_samples
 
-
-# Jit version of function to calculate Y_e
-@jit(nopython=True)
-def calc_Ye_jit(
-    EAI_Exp,
-    decision_inputs
-):
-    EAI_samples, ppl = EAI_Exp
-    # Initialize cost values for 1000 GAM samples
-    cost = np.empty(1000)
-    for k in range(1000): # loop over GAM samples
-        # cost outcome for sample k
-        cost[k] = decision_inputs[1]*ppl + decision_inputs[0]*(1-decision_inputs[2])*EAI_samples[k]
-    # Average cost over the 1000 GAM samples
-    Y_e = np.mean(cost)
-    return Y_e
 
 
 
