@@ -126,36 +126,6 @@ def calc_Ye_jit(
     return Y_e
 
 
-# # Function to calculate Y_e based on all the risk and decision inputs
-# def calc_Ye(
-#         index,
-#         ind,
-#         input_data_path,
-#         risk_inputs, # length of 5: calibration, warming level, SSP, vuln param 1, vuln param 2
-#         decision_inputs # length of 3: cost per day of work, annual cost per person of this decision, efficacy of this decision
-# ):
-#     # Get EAI
-#     EAI = get_EAI(input_data_path,
-#             data_source = risk_inputs[0],
-#             warming_level = risk_inputs[1],
-#             ssp = risk_inputs[2],
-#             vp1 = risk_inputs[3],
-#             vp2 = risk_inputs[4])
-
-#     # Get exposure
-#     # Exposure depends on SSP and SSP year (which comes from warming level)
-#     # Get SSP year to use based on warming level
-#     if risk_inputs[1] == "2deg":
-#         ssp_year = 2041
-#     else:
-#         ssp_year = 2084
-#     Exp = get_Exp(input_data_path,
-#                   ssp = risk_inputs[2],
-#                   ssp_year = ssp_year)
-    
-#     # Calculate Y_e
-#     Y_e = calc_Ye_jit(index, ind, EAI, Exp, decision_inputs)
-#     return Y_e
 
 
     

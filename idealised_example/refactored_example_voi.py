@@ -6,7 +6,7 @@ import time
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.ensemble import RandomForestRegressor
 
-os.chdir('./idealised_example')
+# os.chdir('./idealised_example')
 from python_funcs import *
 
 # ----- Constants and global set-up ------
@@ -16,6 +16,9 @@ DATA_DIR = "/home/aw23877/Documents/bda_sensitivity_paper/bda_risk_dec_sensitivi
 
 # Number of decisions
 nd = 3
+
+# Scores for each decision meeting the non-financial objectives
+obj_scores = [5, 6, 4] # scores for d1, d2, d3
 
 # Define X
 # Define risk inputs
@@ -50,6 +53,10 @@ X_e_labels = ['Calibration method',
             'Annual cost per person of d3',
             'Effectiveness of d3']
 
+# Range for cost per day of work
+DC_low = 100
+DC_high = 300
+
 # Ranges for annual cost per person for each decision
 AC_lows = [0, 150, 500]
 AC_highs = [0, 350, 700]
@@ -69,15 +76,94 @@ ind, lat, lon = get_ind_lat_lon(Exp_array,
                                 vp1 = vuln1_opts[0],
                                 vp2 = vuln2_opts[0])
 
-# ---- Sanity checking ----
-# Let's look at the optimal decision in every location under uncertainty
-# We will loop over each location and sample from the risk and decision input distributions to get a distribution of Y_e for each decision, then find the optimal decision under uncertainty (the one with lowest expected Y_e) and see how it varies across locations. This is just to check that we are getting different optimal decisions in different locations, and that the optimal decision is not always the same across all locations (which would make VoI less interesting).
-# Plot the 1650 - 1660 to see where we are
-# plot_index(range(1650, 1660), lat, lon)
-# plt.show()
+# ---- Calculate maximum financial loss ----
+# Want the maximum financial loss over all locations and all decisions, to scale the financial utility into [0,1]
+# Evaluate all combinations of risk inputs
+# Highest cost per day of work lost
+# Highest annual cost per person for each decision
+# Lowest efficacy for each decision
+# for loc in range(1711):
+#     print(f"Calculating financial loss for location {loc}...")
+#     # Get EAI and exposure samples for this location across all risk input combinations
+#     EAI_Exp_samples = get_EAI_Exp_bundle(
+#         index = loc,
+#         ind = ind,
+#         input_data_path = DATA_DIR,
+#         calibration_opts = calibration_opts,
+#         warming_level_opts = warming_opts,
+#         ssp_opts = ssp_opts,
+#         vuln_param_1_opts = vuln1_opts,
+#         vuln_param_2_opts = vuln2_opts
+#     )
+#     # For each risk input combination and each decision
+#     # Calculate the expected loss for each decision, and store the maximum loss across all locations and all decisions
+#     for EAI_Exp in EAI_Exp_samples.values():
+#         for d in range(nd):
+#             # Use the highest cost per day of work lost, highest annual cost per person for each decision, and lowest efficacy for each decision
+#             DC = DC_high
+#             AC = AC_highs[d]
+#             E = E_lows[d]
+#             decision_inputs = np.array([DC, AC, E], dtype=np.float64)
+#             Y_e = calc_Ye_jit(EAI_Exp, decision_inputs)
+#             if loc == 0 and d == 0:
+#                 max_loss = Y_e
+#             else:
+#                 max_loss = max(max_loss, Y_e)
+# print(f"Maximum financial loss across all locations and all decisions: {max_loss / 1e6:.2f} million")
+# # Save the max_loss to a file for later use
+# np.save("max_loss.npy", max_loss)
+# Read in the max_loss from the file
+max_loss = np.load("max_loss.npy")
+
+# ---- Utility helper ----
+def compute_utilities(losses,
+                      max_loss=max_loss,
+                      obj_scores=obj_scores,
+                      cweights=(0.8, 0.2),
+                      max_obj_score=10.0):
+    """
+    Compute combined utilities from losses and non-financial objective scores.
+
+    losses: array-like. Can be 1D (n_decisions,) or 2D (n_samples, n_decisions)
+    obj_scores: 1D array-like of length n_decisions giving non-financial scores
+    cweights: (financial_weight, nonfinancial_weight)
+    max_obj_score: scalar to scale `obj_scores` into [0,1]
+
+    Returns: utilities array of same shape as `losses`.
+    If `losses` is 1D returns 1D; if 2D returns 2D with per-sample utilities.
+    """
+    losses = np.array(losses)
+    obj_scores_arr = np.array(obj_scores)
+
+    # Ensure we have a 2D array for unified calculations (samples x decisions)
+    squeezed = False
+    if losses.ndim == 1:
+        losses = losses.reshape(1, -1)
+        squeezed = True
+
+    # Financial utility: 1 - (loss / max_loss) so that smaller loss => higher utility
+    financial_util = 1.0 - (losses / max_loss)
+
+    # Non-financial utility: scaled objective scores, broadcast across samples
+    util_meet_objs = obj_scores_arr / float(max_obj_score)
+
+    utilities = cweights[0] * financial_util + cweights[1] * util_meet_objs
+
+    if squeezed:
+        return utilities.flatten()
+    return utilities
+
+
+# # ---- Sanity checking ----
+# # Let's look at the optimal decision in every location under uncertainty
+# # We will loop over each location and sample from the risk and decision input distributions to get a distribution of Y_e for each decision, then find the optimal decision under uncertainty (the one with lowest expected Y_e) and see how it varies across locations. This is just to check that we are getting different optimal decisions in different locations, and that the optimal decision is not always the same across all locations (which would make VoI less interesting).
+# # Plot the 1650 - 1660 to see where we are
+# # plot_index(range(1650, 1660), lat, lon)
+# # plt.show()
 
 # opt_dec_locs = []
-# for idx in range(1711): # just looking at the first 10 locations for now
+# # for idx in range(1711): 
+# for idx in range(1650, 1660):
 #     N_samples = 100
 #     Y_e_samples = np.empty((nd, N_samples))
 #     risk_samples = [
@@ -87,22 +173,37 @@ ind, lat, lon = get_ind_lat_lon(Exp_array,
 #         np.random.choice(vuln1_opts, size=N_samples, replace=True),
 #         np.random.choice(vuln2_opts, size=N_samples, replace=True)
 #     ]
-#     DC_samples = np.random.uniform(low=100, high=300, size=N_samples)
+#     DC_samples = np.random.uniform(low=DC_low, high=DC_high, size=N_samples)
+
+#     # Get EAI and exposure samples for this location across all risk input combinations
+#     EAI_Exp_samples = get_EAI_Exp_bundle(
+#         index = idx,
+#         ind = ind,
+#         input_data_path = DATA_DIR,
+#         calibration_opts = calibration_opts,
+#         warming_level_opts = warming_opts,
+#         ssp_opts = ssp_opts,
+#         vuln_param_1_opts = vuln1_opts,
+#         vuln_param_2_opts = vuln2_opts
+#     )
     
 #     for d in range(nd):
 #         AC_samps = np.random.uniform(low=AC_lows[d], high=AC_highs[d], size=N_samples)
 #         E_samps = np.random.uniform(low=E_lows[d], high=E_highs[d], size=N_samples)
         
 #         for i in range(N_samples):
-#             Y_e_samples[d,i] = calc_Ye(
+#             Y_e_samples[d,i] = calc_Ye_jit(
 #                 index = idx,
 #                 ind = ind,
 #                 input_data_path = DATA_DIR,
 #                 risk_inputs = [risk_samples[j][i] for j in range(5)],
 #                 decision_inputs = [DC_samples[i], AC_samps[i], E_samps[i]]
 #             )
-#     expected_losses = np.mean(Y_e_samples, axis=1)
-#     optimal_decision_uncertain = np.argmin(expected_losses)
+#     # expected_losses = np.mean(Y_e_samples, axis=1)
+#     # Calculate the expected utility for each decision under uncertainty
+#     utilities_samples = compute_utilities(Y_e_samples.T, obj_scores=obj_scores)
+#     expected_utilities_uncertain = np.mean(utilities_samples, axis=0)
+#     optimal_decision_uncertain = int(np.argmax(expected_utilities_uncertain))
 #     opt_dec_locs.append((idx, optimal_decision_uncertain + 1))
 #     print(f"Location index: {idx}, Optimal decision under uncertainty: d{optimal_decision_uncertain + 1}")
 
@@ -123,7 +224,14 @@ ind, lat, lon = get_ind_lat_lon(Exp_array,
 # plt.show()
 
 # ---- Function for VoI analysis ----
-def calculate_evppi(parameter_samples, losses_matrix, optimal_decision_uncertain, n_estimators=50):
+def calculate_evppi(parameter_samples,
+                    losses_matrix,
+                    max_loss,
+                    optimal_decision_uncertain,
+                    n_estimators=50,
+                    obj_scores=obj_scores,
+                    cweights=[0.8, 0.2] # weights for financial and non-financial objectives)
+                    ):
     """
     Calculates EVPPI using a Random Forest Regressor.
     parameter_samples: 1D array (N,) of the parameter we are 'learning'
@@ -133,38 +241,39 @@ def calculate_evppi(parameter_samples, losses_matrix, optimal_decision_uncertain
     # To store E[Loss | Parameter] for each decision
     predicted_expected_losses = np.zeros((N, n_decisions))
 
-    # Check if you can convert the input variable to numeric, and if not, encode it
+    # Prepare X (encode categorical parameter_samples if needed)
     try:
         X = parameter_samples.astype(float).reshape(-1, 1)
-    except ValueError:
+    except Exception:
         enc = OrdinalEncoder()
-        X = enc.fit_transform(parameter_samples.reshape(-1, 1))
-    
-    # 1. Fit regression for each decision
+        X = enc.fit_transform(np.array(parameter_samples).reshape(-1, 1))
+
+    # 1. Fit regression for each decision to predict expected loss conditional on the parameter
     for d in range(n_decisions):
-        # Shallow Random Forest to prevent overfitting
         model = RandomForestRegressor(n_estimators=n_estimators, max_depth=4, random_state=42)
         model.fit(X, losses_matrix[:, d])
         predicted_expected_losses[:, d] = model.predict(X)
-    
-    # 2. Determine the optimal decision for EACH sample given perfect info
-    # We take the index of the minimum predicted loss
-    optimal_decisions_perfect_info = np.argmin(predicted_expected_losses, axis=1)
-    utilities_perfect_info = -predicted_expected_losses[np.arange(N), optimal_decisions_perfect_info]
-    # Calculate mean utility for the EVPPI check
+
+    # 2. Convert predicted expected losses to utilities using the shared helper
+    predicted_utilities_perfect_info = compute_utilities(predicted_expected_losses, max_loss, obj_scores=obj_scores, cweights=cweights)
+
+    # Determine the optimal decision for EACH sample given perfect info
+    optimal_decisions_perfect_info = np.argmax(predicted_utilities_perfect_info, axis=1)
+    utilities_perfect_info = predicted_utilities_perfect_info[np.arange(N), optimal_decisions_perfect_info]
     expected_utility_perfect_info = np.mean(utilities_perfect_info)
 
     # 3. Calculate Probability of Decision Change
-    # Count how many times the info changed the optimal decision
     num_changes = np.sum(optimal_decisions_perfect_info != optimal_decision_uncertain)
     prob_change = num_changes / N
 
-    # 4. Calculate EVPPI
-    avg_losses = np.mean(losses_matrix, axis=0)
-    best_avg_loss = np.min(avg_losses)
-    expected_loss_perfect_info = np.mean(np.min(predicted_expected_losses, axis=1))
-    evppi = best_avg_loss - expected_loss_perfect_info
-    
+    # 4. Calculate EVPPI in utility units: difference between expected utility with perfect info
+    #    and expected utility under current uncertainty (i.e. using the uncertain optimal decision)
+    utilities_under_uncertainty = compute_utilities(losses_matrix, max_loss, obj_scores=obj_scores, cweights=cweights)
+    # utility of the decision chosen under uncertainty for each sample
+    utility_of_uncertain_decision = utilities_under_uncertainty[:, int(optimal_decision_uncertain)]
+    expected_utility_uncertain = np.mean(utility_of_uncertain_decision)
+    evppi = expected_utility_perfect_info - expected_utility_uncertain
+
     return evppi, expected_utility_perfect_info, prob_change, utilities_perfect_info
 
 # ------ Function to run the VoI analysis for a single location ------
@@ -197,7 +306,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
         np.random.choice(vuln2_opts, size=base_N, replace=True)
     ]
     # Sample the cost per day of work
-    DC_samples = np.random.uniform(low=100, high=300, size=base_N)
+    DC_samples = np.random.uniform(low=DC_low, high=DC_high, size=base_N)
 
     # 2. Loop over the decisions and calculate base Y_e for each decision
     for d in range(nd):
@@ -217,9 +326,14 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
         # Calculate the epistemic loss marginalizing epistemic uncertainty
         expected_losses[d] = np.mean(Y_e_samples[d, :])
 
-    expected_utilities_uncertain = -expected_losses
-    std_utilities_uncertain = np.std(-Y_e_samples, axis=1)
-    optimal_decision_uncertain = np.argmax(expected_utilities_uncertain)
+    # Get the maximum loss across all decisions for utility scaling
+    losses_matrix = Y_e_samples.T # shape (base_N, nd)
+
+    # Compute utilities per sample (shape base_N x nd) and derive uncertain expected utilities
+    utilities_samples = compute_utilities(losses_matrix, max_loss, obj_scores=obj_scores)
+    expected_utilities_uncertain = np.mean(utilities_samples, axis=0)
+    std_utilities_uncertain = np.std(utilities_samples, axis=0)
+    optimal_decision_uncertain = int(np.argmax(expected_utilities_uncertain))
 
     # 3. Calculate VoI for all parameters
     print("Calculating EVPPI using random forest regression...")
@@ -238,7 +352,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
     }
     voi_metrics = {}
     for input_name, samples in input_samples.items():
-        voi, expected_utility_perfect_info, prob_change, utilities_with_perfect_info = calculate_evppi(samples, losses_matrix, optimal_decision_uncertain)
+        voi, expected_utility_perfect_info, prob_change, utilities_with_perfect_info = calculate_evppi(samples, losses_matrix, max_loss, optimal_decision_uncertain)
         voi_metrics[input_name] = {
             'voi': voi,
             'expected_utility_perfect_info': expected_utility_perfect_info,
@@ -251,6 +365,7 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
         'location_index': loc_ind,
         'expected_losses': expected_losses,
         'Y_e_samples': Y_e_samples,
+        'utilities_samples': utilities_samples,
         'expected_utilities_uncertain': expected_utilities_uncertain,
         'std_utilities_uncertain': std_utilities_uncertain,
         'optimal_decision_uncertain': optimal_decision_uncertain,
@@ -343,6 +458,18 @@ def generate_location_summary_and_plots(loc_results):
     plt.savefig(f"./figures/voi_decision_inputs_{loc_name.replace(' ', '_')}_{loc_results['location_index']}.png")
     plt.show()
 
+    # Plot histogram of utilities for each decision
+    plt.figure(figsize=(12, 6))
+    for d in range(nd):
+        plt.hist(loc_results['utilities_samples'][:, d], bins=30, alpha=0.5, label=f'Decision {d+1}')
+        plt.axvline(loc_results['expected_utilities_uncertain'][d], color=['blue', 'orange', 'green'][d], linestyle='--', label=f'Expected Utility d{d+1}' if d == 0 else None)
+    plt.xlabel('Utility')
+    plt.ylabel('Frequency')
+    plt.title(f'Histogram of Utilities for {loc_name}')
+    plt.legend()
+    plt.savefig(f"./figures/voi_utilities_histogram_{loc_name.replace(' ', '_')}_{loc_results['location_index']}.png")
+    plt.show()
+
     # Expected utility of the optimal decision under uncertainty:
     # print(f"Expected utility of optimal decision under uncertainty for {loc_name}:{loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f} ± {loc_results['std_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
     print(f"Expected utility of optimal decision under uncertainty for {loc_name}: {loc_results['expected_utilities_uncertain'][loc_results['optimal_decision_uncertain']]:.2f}")
@@ -358,36 +485,36 @@ def generate_location_summary_and_plots(loc_results):
         print(f"Probability of decision change with perfect information about {input_name} for {loc_name}: {metrics['prob_change']:.2%}")
     
 # # Let us test this out on London:
-# lon_name = "London"
-# lon_ind = 241
-# timer_start = time.time()
-# lon_results = run_location_analysis(lon_name, lon_ind, 10000)
-# timer_end = time.time()
-# print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
-# # 0.14 minutes for 10000 samples
+lon_name = "London"
+lon_ind = 241
+timer_start = time.time()
+lon_results = run_location_analysis(lon_name, lon_ind, 10000)
+timer_end = time.time()
+print(f"Time taken for VoI analysis of {lon_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+# 0.14 minutes for 10000 samples
 # # Read in London results
 # lon_results = np.load(f"./results/voi_results_{lon_name.replace(' ', '_')}_{lon_ind}.npy", allow_pickle=True).item()
-# generate_location_summary_and_plots(lon_results)
+generate_location_summary_and_plots(lon_results)
 
 # # Get percentage breakdown of the 3 decisions chosen under uncertainty in London
 # # Y_e_samples has shape (nd, base_N)    
-# decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
-# decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
+decision_counts = np.bincount(lon_results['Y_e_samples'].argmin(axis=0))
+decision_counts / len(lon_results['Y_e_samples'][0, :]) * 100
 
 # # Now let's try the Lake District
-# # ld_name = "Lake District"
-# # ld_ind = 1058
-# # timer_start = time.time()
-# # ld_results = run_location_analysis(ld_name, ld_ind, 10000)
-# # timer_end = time.time()
-# # print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
+ld_name = "Lake District"
+ld_ind = 1058
+timer_start = time.time()
+ld_results = run_location_analysis(ld_name, ld_ind, 10000)
+timer_end = time.time()
+print(f"Time taken for VoI analysis of {ld_name}: {(timer_end - timer_start) / 60:.2f} minutes")
 # # Read in Lake District results
 # ld_results = np.load(f"./results/voi_results_{ld_name.replace(' ', '_')}_{ld_ind}.npy", allow_pickle=True).item()
-# generate_location_summary_and_plots(ld_results)
+generate_location_summary_and_plots(ld_results)
 
 # # Get percentage breakdown of the 3 decisions chosen under uncertainty in the Lake District
-# decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
-# decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
+decision_counts_ld = np.bincount(ld_results['Y_e_samples'].argmin(axis=0))
+decision_counts_ld / len(ld_results['Y_e_samples'][0, :])
 
 # # Location in Scotland where d2 was optimal under uncertainty
 # # scot_name = "Scotland"
