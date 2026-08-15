@@ -6,7 +6,7 @@ import safepython.PAWN_pmf as PAWN_pmf
 import os
 
 # os.chdir('./idealised_example')
-from python_funcs import *
+from location_funcs import *
 
 # # Import results of VoI in London
 # lon_name = "London"

@@ -7,7 +7,7 @@ from sklearn.preprocessing import OrdinalEncoder
 from sklearn.ensemble import RandomForestRegressor
 
 # os.chdir('./idealised_example')
-from python_funcs import *
+from location_funcs import *
 
 # ----- Constants and global set-up ------
 
@@ -226,10 +226,10 @@ def compute_utilities(losses,
 # ---- Function for VoI analysis ----
 def calculate_evppi(parameter_samples,
                     losses_matrix,
-                    max_loss,
                     optimal_decision_uncertain,
                     n_estimators=50,
                     obj_scores=obj_scores,
+                    max_loss=max_loss,
                     cweights=[0.8, 0.2] # weights for financial and non-financial objectives)
                     ):
     """
@@ -352,7 +352,9 @@ def run_location_analysis(loc_name, loc_ind, base_N = 1000, save_file = True):
     }
     voi_metrics = {}
     for input_name, samples in input_samples.items():
-        voi, expected_utility_perfect_info, prob_change, utilities_with_perfect_info = calculate_evppi(samples, losses_matrix, max_loss, optimal_decision_uncertain)
+        voi, expected_utility_perfect_info, prob_change, utilities_with_perfect_info = calculate_evppi(samples,
+                                                                                                       losses_matrix,
+                                                                                                       optimal_decision_uncertain)
         voi_metrics[input_name] = {
             'voi': voi,
             'expected_utility_perfect_info': expected_utility_perfect_info,

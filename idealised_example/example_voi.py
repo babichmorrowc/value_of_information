@@ -6,7 +6,7 @@ import numpy as np
 import random
 
 os.chdir('./idealised_example')
-from python_funcs import *
+from location_funcs import *
 
 # Data folder
 DATA_DIR = "/home/aw23877/Documents/bda_sensitivity_paper/bda_risk_dec_sensitivity/data/"
