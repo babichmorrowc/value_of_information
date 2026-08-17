@@ -73,8 +73,45 @@ def plot_Ye_distribution(samples: sampling.EpistemicSamples, location_index: int
     ax.legend()
     return fig
 
-# London, per your original script's location index - swap in whatever
-# location you want to check.
-samples = summarize_location(location_index=241, n_samples=5000)
-fig = plot_Ye_distribution(samples, location_index=241)
+# London:
+samples_lon = summarize_location(location_index=241, n_samples=5000)
+fig = plot_Ye_distribution(samples_lon, location_index=241)
+plt.show()
+
+# Lake District:
+samples_ld = summarize_location(location_index=1058, n_samples=5000)
+fig = plot_Ye_distribution(samples_ld, location_index=1058)
+plt.show()
+
+# Scotland:
+samples_sc = summarize_location(location_index=1460, n_samples=5000)
+fig = plot_Ye_distribution(samples_sc, location_index=1460)
+plt.show()
+
+# Get samples for all locations in the grid
+# Plot a map of the percentage of samples where each decision is optimal, for a quick sanity check
+# Store the percentages for each location and each decision in a 2D array for plotting
+
+percentages_array = np.zeros((1711, cfg.N_DECISIONS))
+for loc in range(1711):
+    print(f"Processing location {loc}...")
+    samples = summarize_location(location_index=loc, n_samples=500)
+    naive_decision = np.argmin(samples.Y_e, axis=1)
+    counts = np.bincount(naive_decision, minlength=cfg.N_DECISIONS)
+    percentages = 100 * counts / 500
+    percentages_array[loc] = percentages
+    print(f"Location {loc}: {percentages}")
+
+# Plot the percentages for each decision on a map
+from cartopy import crs as ccrs
+
+grid = spatial.load_spatial_grid()
+fig = plt.figure(figsize=(12, 8))
+for d in range(cfg.N_DECISIONS):
+    ax = fig.add_subplot(2, 3, d + 1, projection=ccrs.PlateCarree())
+    sc = ax.scatter(grid.lon, grid.lat, c=percentages_array[:, d], cmap="Greens", s=10, vmin=0, vmax=100)
+    ax.set_title(f"Decision {d + 1}: % optimal")
+    ax.coastlines()
+    plt.colorbar(sc, ax=ax, orientation="vertical", label="% optimal")
+plt.tight_layout()
 plt.show()
