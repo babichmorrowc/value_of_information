@@ -10,15 +10,6 @@ them for both PAWN and VoI is an efficiency choice, not a methodological
 shortcut: the per-sample decision d = argmax_d u(Y_e(d), d) is exactly the
 quantity PAWN's sensitivity index is computed over, and the same Y_e(d)
 matrix is what VoI's EVPPI calculation consumes directly.
-
-NOTE: get_EAI_Exp_bundle is imported from location_funcs, treated here as a
-fixed black box. calc_Ye_jit is defined in this module (moved from
-location_funcs) since it's the core per-sample loss calculation the rest of
-sampling.py is built around. This module has not been executed against the
-real data/location_funcs in this environment - please run it against your
-actual location_funcs.py before relying on it, in case the real function
-signatures differ from what's assumed here (matched against the original
-script you shared).
 """
 from dataclasses import dataclass
 
@@ -27,6 +18,7 @@ from numba import jit
 
 import config as cfg
 from location_funcs import get_EAI_Exp_bundle
+
 
 @jit(nopython=True)
 def calc_Ye_jit(EAI_Exp, decision_inputs):
@@ -49,7 +41,6 @@ def calc_Ye_jit(EAI_Exp, decision_inputs):
     cost = np.empty(1000)
     for k in range(1000):  # loop over GAM samples of theta
         cost[k] = decision_inputs[1] * ppl + decision_inputs[0] * (1 - decision_inputs[2]) * EAI_samples[k]
-    # Average cost over the 1000 GAM samples
     return np.mean(cost)
 
 
@@ -166,14 +157,36 @@ def generate_location_samples(
     ind: np.ndarray,
     n_samples: int,
     rng: np.random.Generator,
+    X_e: dict = None,
 ) -> EpistemicSamples:
     """Generate the full shared sample base for one location.
 
     This is the single entry point both PAWN and VoI build on: draw X_e
-    once, compute Y_e(d) once, and hand both back for the two methods to
-    consume independently downstream.
+    (or reuse a shared one - see below), compute Y_e(d) once, and hand
+    both back for the two methods to consume independently downstream.
+
+    X_e : optional pre-drawn epistemic input samples (e.g. from a single
+        upfront call to sample_epistemic_inputs), to reuse identical input
+        draws across multiple locations. There's no requirement to redraw
+        X_e per location - the risk/decision inputs aren't location-specific,
+        only Y_e(d) is (via that location's EAI_Exp_samples). Reusing the
+        same X_e across locations also means differences in Y_e/PAWN/VoI
+        results between locations reflect the location's risk profile
+        rather than sampling noise (common random numbers). If X_e is
+        given, `rng` and `n_samples` are only used to validate/label the
+        result - n_samples must match len(X_e) or a ValueError is raised.
+        If X_e is None (the default), a fresh sample is drawn using rng.
     """
-    X_e = sample_epistemic_inputs(n_samples, rng)
+    if X_e is None:
+        X_e = sample_epistemic_inputs(n_samples, rng)
+    else:
+        actual_n = len(X_e["Cost per day of work lost"])
+        if actual_n != n_samples:
+            raise ValueError(
+                f"n_samples ({n_samples}) does not match the length of the "
+                f"provided X_e ({actual_n})."
+            )
+
     Y_e = compute_Ye_matrix(location_index, X_e, ind)
     return EpistemicSamples(
         X_e=X_e,

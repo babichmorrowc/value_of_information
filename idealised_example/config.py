@@ -7,23 +7,33 @@ fixes the canonical order used everywhere X_e is represented as an array
 (e.g. for PAWN's input matrix).
 """
 from pathlib import Path
+# import numpy as np
 
 # ----- Paths -----
 DATA_DIR = Path("/home/aw23877/Documents/bda_sensitivity_paper/bda_risk_dec_sensitivity/data/")
 RESULTS_DIR = Path("./results")
 FIGURES_DIR = Path("./figures")
 
+# ----- Reproducibility -----
+# Seed for the epistemic input sampling (sampling.sample_epistemic_inputs).
+# Since X_e is now drawn once and shared across all locations (see
+# sampling.generate_location_samples), this single seed determines the
+# entire study's input sample - record it here rather than inline in a
+# run script so it's easy to find/cite.
+RANDOM_SEED = 42
+
 # ----- Decisions -----
 N_DECISIONS = 3
 DECISION_LABELS = ["d1_no_action", "d2_modify_hours", "d3_cooling_equipment"]
 
-# Non-financial alignment scores for each decision (d1, d2, d3).
-# Higher score = better alignment with organisational objectives.
-OBJ_SCORES = [5, 6, 4]
+# Arguments for weighted financial/non-financial utility:
+# # Non-financial alignment scores for each decision (d1, d2, d3).
+# # Higher score = better alignment with organisational objectives.
+# OBJ_SCORES = [5, 6, 4]
 
-# Utility function weights: (financial_weight, nonfinancial_weight)
-UTILITY_WEIGHTS = (0.8, 0.2)
-MAX_OBJ_SCORE = 10.0
+# # Utility function weights: (financial_weight, nonfinancial_weight)
+# UTILITY_WEIGHTS = (0.8, 0.2)
+# MAX_OBJ_SCORE = 10.0
 
 # ----- Risk (epistemic) input options -----
 CALIBRATION_OPTS = ["UKCP_raw", "UKCP_BC", "ChangeFactor"]
@@ -43,8 +53,12 @@ DC_RANGE = (100, 300)  # cost per day of work lost, shared across all decisions
 # Per-decision ranges for annual cost per person (AC) and efficacy (E).
 # d1 ("no action") has no cost/efficacy to sample - it is fixed at zero
 # directly in sampling.compute_Ye_matrix and does not appear in X_E_LABELS.
-AC_RANGES = {1: (150, 350), 2: (500, 700)}  # keyed by zero-indexed decision (d2, d3)
-E_RANGES = {1: (0.3, 0.5), 2: (0.7, 0.9)}
+# AC_RANGES = {1: (150, 350), 2: (500, 700)}  # keyed by zero-indexed decision (d2, d3)
+# Trying a new range of AC values for decision 2 in an effort to make decisions more balanced:
+AC_RANGES = {1: (100, 300), 2: (600, 800)}  # keyed by zero-indexed decision (d2, d3)
+# E_RANGES = {1: (0.3, 0.5), 2: (0.7, 0.9)}
+# Trying a new range of E values as well:
+E_RANGES = {1: (0.3, 0.5), 2: (0.6, 0.8)}
 
 # ----- Canonical order of epistemic inputs for PAWN / VoI -----
 X_E_LABELS = [
@@ -59,3 +73,18 @@ X_E_LABELS = [
     "Annual cost per person of d3",
     "Effectiveness of d3",
 ]
+
+# ----- Max loss for utility scaling -----
+# Maximum financial loss across all locations, decisions, and values of X
+# Read in from file (originally calculated in refactored_example+voi.py)
+# MAX_LOSS = np.load("max_loss.npy")
+# Removing this to return to financial utility only
+
+# ----- PAWN settings -----
+# Number of conditioning intervals requested per input (categorical inputs
+# with fewer distinct values than this automatically use one group per
+# value instead - see safepython.PAWN.pawn_split_sample).
+PAWN_N_CONDITIONING_INTERVALS = 10
+# Number of bootstrap resamples used to characterise uncertainty in the
+# sensitivity index estimate (see aggregate_boot in the PAWN module).
+PAWN_N_BOOTSTRAP = 100

@@ -1,14 +1,10 @@
 """
 Quick manual check: generate X_e / Y_e(d) samples for a single location
 using the real data, and print a summary to sanity-check the output.
-
-Run this from the directory containing config.py, spatial.py, sampling.py,
-and your real location_funcs.py. Uses config.DATA_DIR - double check that
-still points at the right place in whatever environment you're running
-this in.
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 import config as cfg
 import spatial
@@ -73,8 +69,70 @@ def plot_Ye_distribution(samples: sampling.EpistemicSamples, location_index: int
     ax.legend()
     return fig
 
+def map_optimal_decisions(
+    n_samples: int = 2000,
+    seed: int = None,
+    location_indices=None,
+    progress_every: int = 100,
+):
+    """Compute and map the optimal decision under uncertainty at every location.
+ 
+    Optimal decision here means argmin_d E[Y_e(d)] - same rule as
+    check_optimal_decision.py, just run across many locations and plotted
+    spatially instead of printed for one.
+ 
+    location_indices : optional subset of location indices to run (e.g.
+        range(200) for a quick test) - defaults to every location in the
+        spatial grid. NB this loop calls get_EAI_Exp_bundle once per
+        location (inside sampling.compute_Ye_matrix), which reads a NetCDF
+        file per risk-input combination - this is the same cost as your
+        original script's max_loss sweep, and can be slow over the full
+        ~1700 locations. Try a subset first.
+ 
+    Uses one shared X_e sample across all locations (see the note in
+    sampling.generate_location_samples on why that's preferred over
+    resampling per location).
+    """
+    grid = spatial.load_spatial_grid()
+    rng = np.random.default_rng(seed if seed is not None else cfg.RANDOM_SEED)
+    X_e = sampling.sample_epistemic_inputs(n_samples, rng)
+ 
+    if location_indices is None:
+        location_indices = range(len(grid.lat))
+    location_indices = list(location_indices)
+ 
+    optimal_decisions = np.full(len(location_indices), -1, dtype=int)
+    for i, loc_ind in enumerate(location_indices):
+        samples = sampling.generate_location_samples(
+            location_index=loc_ind, ind=grid.ind, n_samples=n_samples, rng=None, X_e=X_e
+        )
+        expected_losses = samples.Y_e.mean(axis=0)
+        optimal_decisions[i] = int(np.argmin(expected_losses))
+        if progress_every and (i + 1) % progress_every == 0:
+            print(f"  {i + 1}/{len(location_indices)} locations done...")
+ 
+    lat = grid.lat[location_indices]
+    lon = grid.lon[location_indices]
+ 
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
+    for d in range(cfg.N_DECISIONS):
+        mask = optimal_decisions == d
+        ax.scatter(lon[mask], lat[mask], s=12, label=cfg.DECISION_LABELS[d])
+    ax.coastlines(color="grey", linewidth=0.5)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title("Optimal decision under uncertainty (argmin E[Y_e])")
+    ax.legend()
+ 
+    return fig, optimal_decisions
+
+
 # London:
+# timer_start = time.time()
 samples_lon = summarize_location(location_index=241, n_samples=5000)
+# timer_end = time.time()
+# print(f'Time taken to summarize_location: {(timer_end - timer_start) / 60:.2f} minutes')
+# 0.07 minutes with 5000 samples
 fig = plot_Ye_distribution(samples_lon, location_index=241)
 plt.show()
 
@@ -91,7 +149,6 @@ plt.show()
 # Get samples for all locations in the grid
 # Plot a map of the percentage of samples where each decision is optimal, for a quick sanity check
 # Store the percentages for each location and each decision in a 2D array for plotting
-
 percentages_array = np.zeros((1711, cfg.N_DECISIONS))
 for loc in range(1711):
     print(f"Processing location {loc}...")
@@ -114,4 +171,20 @@ for d in range(cfg.N_DECISIONS):
     ax.coastlines()
     plt.colorbar(sc, ax=ax, orientation="vertical", label="% optimal")
 plt.tight_layout()
+plt.show()
+
+# Map the optimal decision under uncertainty for a subsample of locations:
+timer_start = time.time()
+fig, optimal_decisions = map_optimal_decisions(n_samples=2000, location_indices=range(1500,1700), progress_every=1)
+timer_end = time.time()
+print(f"Time: {(timer_end - timer_start) / 60:.2f} minutes")
+# 12.65 minutes for 200 locations and 2000 samples/location
+plt.show()
+
+# Map the optimal decision under uncertainty for all locations:
+timer_start = time.time()
+fig, optimal_decisions = map_optimal_decisions(n_samples=200, progress_every=1)
+timer_end = time.time()
+print(f"Time: {(timer_end - timer_start) / 60:.2f} minutes")
+# -- minutes for all locations and 200 samples/location
 plt.show()
