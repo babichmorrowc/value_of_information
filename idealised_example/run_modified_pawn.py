@@ -45,15 +45,23 @@ def print_pawn_result(result: modified_pawn.PawnResult, location_index: int):
             f"[{result.max_dist_lb[i]:.3f}, {result.max_dist_ub[i]:.3f}]"
         )
 
-def plot_pawn_bargraph(result: modified_pawn.PawnResult, location_index: int):
+def plot_pawn_bargraph(result: modified_pawn.PawnResult, location_index: int, ax=None):
     original_errors = np.array([result.max_dist_lb, result.max_dist_ub])
     error_bars = np.zeros_like(original_errors)
-    error_bars[0,:] = result.max_dist_mean - original_errors[0,:]
-    error_bars[1,:] = original_errors[1,:] - result.max_dist_mean
-    fig = plt.figure(figsize=(15,10))
-    plt.bar(result.labels, result.max_dist_mean, yerr=error_bars)
-    plt.title(f'Modified PAWN sensitivity index for location {location_index}')
-    return fig
+    error_bars[0, :] = result.max_dist_mean - original_errors[0, :]
+    error_bars[1, :] = original_errors[1, :] - result.max_dist_mean
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(15, 10))
+    else:
+        fig = ax.figure
+
+    ax.bar(result.labels, result.max_dist_mean, yerr=error_bars)
+    ax.set_title(f"Modified PAWN sensitivity index for location {location_index}")
+    ax.set_xlabel("Input")
+    ax.set_ylabel("Sensitivity index")
+    ax.tick_params(axis="x", rotation=45)
+    return ax
 
 # Draw X_e once, up front, and reuse it for every location - see the
 # note on shared sampling in sampling.generate_location_samples.

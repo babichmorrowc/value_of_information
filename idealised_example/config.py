@@ -25,6 +25,8 @@ RANDOM_SEED = 42
 # ----- Decisions -----
 N_DECISIONS = 3
 DECISION_LABELS = ["d1_no_action", "d2_modify_hours", "d3_cooling_equipment"]
+DECISION_NAMES = ['Do nothing', 'Modify working hours', 'Buy cooling equipment']
+DECISION_COLORS = ['gray', 'lawngreen', 'magenta']
 
 # Arguments for weighted financial/non-financial utility:
 # # Non-financial alignment scores for each decision (d1, d2, d3).
@@ -74,6 +76,19 @@ X_E_LABELS = [
     "Effectiveness of d3",
 ]
 
+X_E_SHORT_LABELS = [
+    "CAL",
+    "WARM",
+    "SSP",
+    "VULN1",
+    "VULN2",
+    "CD",
+    "AC2",
+    "E2",
+    "AC3",
+    "E3"
+]
+
 # ----- Max loss for utility scaling -----
 # Maximum financial loss across all locations, decisions, and values of X
 # Read in from file (originally calculated in refactored_example+voi.py)
@@ -88,3 +103,6 @@ PAWN_N_CONDITIONING_INTERVALS = 10
 # Number of bootstrap resamples used to characterise uncertainty in the
 # sensitivity index estimate (see aggregate_boot in the PAWN module).
 PAWN_N_BOOTSTRAP = 100
+
+# ----- Locations for plotting -----
+LOCATION_INDICES = [241, 1058, 1460]  # London, Lake District, Scotland

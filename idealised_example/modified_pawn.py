@@ -19,7 +19,8 @@ aggregate_boot) is already in the standard pip package.
 from dataclasses import dataclass
 
 import numpy as np
-from safepython.PAWN_pmf import pawn_pmf_indices, pawn_plot_pmf
+import matplotlib.pyplot as plt
+from safepython.PAWN_pmf import pawn_pmf_indices
 from safepython.util import aggregate_boot
 
 import config as cfg
@@ -144,3 +145,21 @@ def compute_pawn_indices(
         max_dist_lb=lb,
         max_dist_ub=ub,
     )
+
+def plot_pawn_bargraph(result: PawnResult, location_index: int, ax=None, **kwargs):
+    original_errors = np.array([result.max_dist_lb, result.max_dist_ub])
+    error_bars = np.zeros_like(original_errors)
+    error_bars[0, :] = result.max_dist_mean - original_errors[0, :]
+    error_bars[1, :] = original_errors[1, :] - result.max_dist_mean
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(15, 10))
+    else:
+        fig = ax.figure
+
+    ax.bar(result.labels, result.max_dist_mean, yerr=error_bars, **kwargs)
+    ax.set_title(f"Modified PAWN sensitivity index for location {location_index}")
+    ax.set_xlabel("Input")
+    ax.set_ylabel("Sensitivity index")
+    ax.tick_params(axis="x", rotation=45)
+    return ax
