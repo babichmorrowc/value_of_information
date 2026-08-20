@@ -249,8 +249,10 @@ def calculate_evppi(parameter_samples,
         X = enc.fit_transform(np.array(parameter_samples).reshape(-1, 1))
 
     # 1. Fit regression for each decision to predict expected loss conditional on the parameter
+    # For each decision:
     for d in range(n_decisions):
         model = RandomForestRegressor(n_estimators=n_estimators, max_depth=4, random_state=42)
+        # Predict the loss of that decision based on the inputs
         model.fit(X, losses_matrix[:, d])
         predicted_expected_losses[:, d] = model.predict(X)
 
@@ -258,6 +260,7 @@ def calculate_evppi(parameter_samples,
     predicted_utilities_perfect_info = compute_utilities(predicted_expected_losses, max_loss, obj_scores=obj_scores, cweights=cweights)
 
     # Determine the optimal decision for EACH sample given perfect info
+    # Based on the estimated utilities
     optimal_decisions_perfect_info = np.argmax(predicted_utilities_perfect_info, axis=1)
     utilities_perfect_info = predicted_utilities_perfect_info[np.arange(N), optimal_decisions_perfect_info]
     expected_utility_perfect_info = np.mean(utilities_perfect_info)
@@ -269,9 +272,15 @@ def calculate_evppi(parameter_samples,
     # 4. Calculate EVPPI in utility units: difference between expected utility with perfect info
     #    and expected utility under current uncertainty (i.e. using the uncertain optimal decision)
     utilities_under_uncertainty = compute_utilities(losses_matrix, max_loss, obj_scores=obj_scores, cweights=cweights)
+    # Get the utilities of the decision picked by the random forest estimator
+    utility_of_perfect_info_decision = utilities_under_uncertainty[np.arange(N), optimal_decisions_perfect_info]
+    expected_utility_perfect_info = np.mean(utility_of_perfect_info_decision)
+
     # utility of the decision chosen under uncertainty for each sample
     utility_of_uncertain_decision = utilities_under_uncertainty[:, int(optimal_decision_uncertain)]
     expected_utility_uncertain = np.mean(utility_of_uncertain_decision)
+
+    # This matches the estimator in Eq. 30 of Straub et al. 2025
     evppi = expected_utility_perfect_info - expected_utility_uncertain
 
     return evppi, expected_utility_perfect_info, prob_change, utilities_perfect_info
