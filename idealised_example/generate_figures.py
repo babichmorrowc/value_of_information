@@ -10,6 +10,7 @@ from sampling import EpistemicSamples
 from precompute_samples import load_precomputed
 from utility import compute_utilities
 from modified_pawn import encode_Xe_numeric, compute_pawn_indices, plot_pawn_bargraph
+from voi import compute_all_evppi, plot_smoothing_estimator
 
 # ---- Load samples ----
 samples = load_precomputed()
@@ -21,6 +22,10 @@ longitudes = samples["lon"]
 # ---- Plotting set-up ----
 # Set up colors for plotting
 cols = ListedColormap(config.DECISION_COLORS)
+
+# Input labels
+risk_inputs = config.X_E_LABELS[:5]
+decision_inputs = config.X_E_LABELS[5:]
 
 # ---- Map of optimal decision under uncertainty ----
 # Using the precomputed samples, plot the optimal decision under uncertainty for each location
@@ -234,4 +239,119 @@ for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake Dis
     ax.set_title(f"({chr(97 + i)})")
 plt.tight_layout()
 plt.savefig(config.FIGURES_DIR / "pawn_bargraphs.png")
+plt.show()
+
+# ---- VoI: Loess smoothing plots for Lake District ----
+loc_index = config.LOCATION_INDICES[1]
+
+# Pull samples for the Lake District
+samples_for_location = {
+    "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+    "Y_e": samples['Y_e_all'][loc_index],
+    "location_index": loc_index,
+    "n_samples": samples["n_samples"],
+}
+samples_for_location = EpistemicSamples(**samples_for_location)
+
+# First, plot for the risk-related inputs:
+# Create a 3x5 figure
+fig, axes = plt.subplots(3, 5, figsize=(20, 6))
+panel_label = 0
+
+for row_idx in range(3):
+    # Determine which decision (0, 1, or 2)
+    decision_idx = row_idx % 3
+    
+    for col_idx, input_label in enumerate(risk_inputs):
+        ax = axes[row_idx, col_idx]
+        plot_smoothing_estimator(
+            samples_for_location,
+            input_label,
+            location_index=loc_index,
+            ax=ax,
+            decision_index=decision_idx,
+        )
+        # Add panel label
+        ax.text(-0.3, 1.05, f"({chr(97 + panel_label)})", transform=ax.transAxes,
+                fontsize=11, fontweight='bold', va='bottom', ha='right')
+        panel_label += 1
+
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "voi_conditionalexp_lake_district.png")
+plt.show()
+
+# Now the decision-related inputs
+fig, axes = plt.subplots(3, 5, figsize=(20, 6))
+panel_label = 0
+
+for row_idx in range(3):
+    # Determine which decision (0, 1, or 2)
+    decision_idx = row_idx % 3
+    
+    for col_idx, input_label in enumerate(decision_inputs):
+        ax = axes[row_idx, col_idx]
+        plot_smoothing_estimator(
+            samples_for_location,
+            input_label,
+            location_index=loc_index,
+            ax=ax,
+            decision_index=decision_idx,
+        )
+        # Add panel label
+        ax.text(-0.3, 1.05, f"({chr(97 + panel_label)})", transform=ax.transAxes,
+                fontsize=11, fontweight='bold', va='bottom', ha='right')
+        panel_label += 1
+
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "voi_smoothing_lake_district.png")
+plt.show()
+
+# ---- VoI: barplot of VoI values in all 3 locations ----
+# In a 3 panel figure
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
+    samples_for_location = {
+        "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+        "Y_e": samples['Y_e_all'][location_index],
+        "location_index": location_index,
+        "n_samples": samples["n_samples"]
+    }
+    samples_for_location = EpistemicSamples(**samples_for_location)
+    voi_results = compute_all_evppi(samples_for_location)
+    voi_vals = [r.evppi for r in voi_results]
+
+    ax = axes[i]
+    x = np.arange(len(config.X_E_SHORT_LABELS))
+    ax.bar(x, voi_vals)
+    ax.set_xticks(x)
+    ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
+    ax.set_ylabel("Value of information")
+    ax.set_title(f"({chr(97 + i)})")
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "voi_bargraphs.png")
+plt.show()
+
+# ---- VoI: barplot of probability of decision change in all 3 locations ----
+# In a 3 panel figure
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
+    samples_for_location = {
+        "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+        "Y_e": samples['Y_e_all'][location_index],
+        "location_index": location_index,
+        "n_samples": samples["n_samples"]
+    }
+    samples_for_location = EpistemicSamples(**samples_for_location)
+    voi_results = compute_all_evppi(samples_for_location)
+    dc_vals = [r.prob_change for r in voi_results]
+
+    ax = axes[i]
+    x = np.arange(len(config.X_E_SHORT_LABELS))
+    ax.bar(x, dc_vals)
+    ax.set_xticks(x)
+    ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
+    ax.set_ylabel("Probability of decision change")
+    ax.set_title(f"({chr(97 + i)})")
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "dc_bargraphs.png")
 plt.show()

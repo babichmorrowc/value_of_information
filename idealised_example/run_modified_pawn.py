@@ -63,22 +63,22 @@ def plot_pawn_bargraph(result: modified_pawn.PawnResult, location_index: int, ax
     ax.tick_params(axis="x", rotation=45)
     return ax
 
-# Draw X_e once, up front, and reuse it for every location - see the
-# note on shared sampling in sampling.generate_location_samples.
-n_samples = 5000
-rng = np.random.default_rng(cfg.RANDOM_SEED)
-grid = spatial.load_spatial_grid()
-X_e = sampling.sample_epistemic_inputs(n_samples, rng)
-# London and the Lake District, per your original script's indices -
-# swap in / extend this list with whatever locations you want.
-location_indices = {"London": 241, "Lake District": 1058}
-for name, loc_ind in location_indices.items():
-    result = run_pawn_for_location(location_index=loc_ind,
-                                   grid=grid,
-                                   X_e=X_e,
-                                   n_samples=n_samples)
-    print_pawn_result(result, location_index=loc_ind)
-    # plot_pawn_result(result, location_index=loc_ind)
+# # Draw X_e once, up front, and reuse it for every location - see the
+# # note on shared sampling in sampling.generate_location_samples.
+# n_samples = 5000
+# rng = np.random.default_rng(cfg.RANDOM_SEED)
+# grid = spatial.load_spatial_grid()
+# X_e = sampling.sample_epistemic_inputs(n_samples, rng)
+# # London and the Lake District, per your original script's indices -
+# # swap in / extend this list with whatever locations you want.
+# location_indices = {"London": 241, "Lake District": 1058}
+# for name, loc_ind in location_indices.items():
+#     result = run_pawn_for_location(location_index=loc_ind,
+#                                    grid=grid,
+#                                    X_e=X_e,
+#                                    n_samples=n_samples)
+#     print_pawn_result(result, location_index=loc_ind)
+#     # plot_pawn_result(result, location_index=loc_ind)
 
-plot_pawn_bargraph(result, loc_ind)
-plt.show()
+# plot_pawn_bargraph(result, loc_ind)
+# plt.show()
