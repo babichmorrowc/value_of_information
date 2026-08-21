@@ -126,7 +126,7 @@ if __name__ == "__main__":
     # Drop location_indices (or pass None) to run the full spatial grid.
     precompute_all_locations(
         n_samples=10000,
-        # location_indices=[241, 1058],
+        # location_indices=[1445, 1449],
         out_path="samples_cache.npz",
     )
 

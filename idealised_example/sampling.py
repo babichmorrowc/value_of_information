@@ -135,6 +135,23 @@ def compute_Ye_matrix(location_index: int, X_e: dict, ind: np.ndarray) -> np.nda
     vuln2 = X_e["Vulnerability parameter 2"]
     DC = X_e["Cost per day of work lost"]
 
+    # Some (location, SSP, warming level) combinations have zero exposed
+    # population (no one working outdoor physical jobs there under that
+    # scenario) - ppl is the second element of each EAI_Exp_samples entry.
+    # With zero people, there's no one for heat stress to affect, so every
+    # decision should show zero loss, and the optimal decision should
+    # always be d1 ("no action"), since paying for d2/d3 would be pure
+    # waste. Precompute this mask once (it only depends on the risk
+    # inputs, not on which decision we're evaluating).
+    ppl_per_sample = np.array(
+        [
+            EAI_Exp_samples[(calibration[i], warming[i], ssp[i], vuln1[i], vuln2[i])][1]
+            for i in range(n_samples)
+        ]
+    )
+    zero_population = ppl_per_sample == 0
+
+
     Y_e = np.empty((n_samples, cfg.N_DECISIONS))
     for d in range(cfg.N_DECISIONS):
         if d == 0:
@@ -148,6 +165,19 @@ def compute_Ye_matrix(location_index: int, X_e: dict, ind: np.ndarray) -> np.nda
             key = (calibration[i], warming[i], ssp[i], vuln1[i], vuln2[i])
             EAI_Exp = EAI_Exp_samples[key]
             Y_e[i, d] = calc_Ye_jit(EAI_Exp, [DC[i], AC[i], E[i]])
+
+    # Zero-population override: force exactly zero loss for every decision
+    # on these samples, regardless of what calc_Ye_jit computed (theta may
+    # still be non-zero there due to upstream data/interpolation artifacts,
+    # even though nobody is exposed). Since all three decisions then tie at
+    # exactly 0.0, argmax(-Y_e) / argmin(Y_e) selects d1 via NumPy's
+    # documented first-occurrence tie-breaking (d1 is index 0 in
+    # cfg.DECISION_LABELS) - this is a stable, documented contract, not an
+    # implementation detail, but see tests/test_zero_population.py for a
+    # regression test that pins this behaviour explicitly in case
+    # DECISION_LABELS' order ever changes.
+    Y_e[zero_population, :] = 0.0
+
 
     return Y_e
 

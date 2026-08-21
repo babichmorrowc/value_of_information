@@ -160,7 +160,7 @@ pawn_plot_pmf(
 for ax in plt.gcf().axes[:-1]:
     ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
 
-plt.savefig(config.FIGURES_DIR / "london_pmf.png")
+# plt.savefig(config.FIGURES_DIR / "london_pmf.png")
 plt.show()
 
 # Lake District:
