@@ -10,6 +10,7 @@ from sampling import EpistemicSamples
 from precompute_samples import load_precomputed
 from utility import compute_utilities
 from modified_pawn import encode_Xe_numeric, compute_pawn_indices, plot_pawn_bargraph
+import run_modified_pawn_all_locs as rpa
 from voi import compute_all_evppi, plot_smoothing_estimator
 
 # ---- Load samples ----
@@ -18,6 +19,9 @@ samples = load_precomputed()
 # Get lat lons for mapping
 latitudes = samples["lat"]
 longitudes = samples["lon"]
+
+# ---- Load PAWN results ----
+pawn_results = rpa.load_pawn_results("pawn_results.npz")
 
 # ---- Plotting set-up ----
 # Set up colors for plotting
@@ -239,6 +243,20 @@ for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake Dis
     ax.set_title(f"({chr(97 + i)})")
 plt.tight_layout()
 plt.savefig(config.FIGURES_DIR / "pawn_bargraphs.png")
+plt.show()
+
+# ---- Modified PAWN: map of PAWN sensitivity index for all inputs across all locations ----
+
+fig = plt.figure(figsize=(18,8))
+for i, input_i in enumerate(pawn_results['labels']):
+    ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
+    scatter = ax.scatter(longitudes, latitudes, c=pawn_results['max_dist_mean'][:, i], s=10, cmap="Blues", vmin=0, vmax=0.25)
+    ax.set_title(f"({chr(97 + i)})")
+    ax.coastlines(linewidth=0.5)
+    cbar = plt.colorbar(scatter, ax=ax, shrink = 0.8)
+    cbar.set_label(f"$S_i$ for {pawn_results['labels'][i]}")
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "pawn_maps.png")
 plt.show()
 
 # ---- VoI: Loess smoothing plots for Lake District ----
