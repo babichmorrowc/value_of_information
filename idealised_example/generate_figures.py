@@ -1,6 +1,6 @@
 # Generate figures for Chapter 4
 from matplotlib import pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, LogNorm
 import cartopy.crs as ccrs
 import numpy as np
 from safepython.PAWN_pmf import pawn_plot_pmf
@@ -11,6 +11,7 @@ from precompute_samples import load_precomputed
 from utility import compute_utilities
 from modified_pawn import encode_Xe_numeric, compute_pawn_indices, plot_pawn_bargraph
 import run_modified_pawn_all_locs as rpa
+import run_voi_all_locs as run_voi
 from voi import compute_all_evppi, plot_smoothing_estimator
 
 # ---- Load samples ----
@@ -22,6 +23,9 @@ longitudes = samples["lon"]
 
 # ---- Load PAWN results ----
 pawn_results = rpa.load_pawn_results("pawn_results.npz")
+
+# ---- Load VoI results ----
+voi_results = run_voi.load_voi_results("voi_results.npz")
 
 # ---- Plotting set-up ----
 # Set up colors for plotting
@@ -70,7 +74,7 @@ for d in range(config.N_DECISIONS):
     cbar = plt.colorbar(sc, ax=ax, shrink = 0.8)
     cbar.set_label(f"Decision {d + 1}: % optimal")
 plt.tight_layout()
-plt.savefig(config.FIGURES_DIR / "percentage_optimality_map.png")
+# plt.savefig(config.FIGURES_DIR / "percentage_optimality_map.png")
 plt.show()
 
 # ---- Histograms of Y_e(d) for selected locations ----
@@ -94,6 +98,34 @@ for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake Dis
     ax.legend()
 plt.tight_layout()
 plt.savefig(config.FIGURES_DIR / "Ye_distribution_histograms.png")
+plt.show()
+
+# For location 3, split up the plot by levels of warming value
+location_index = 1460
+samples_for_location = {
+    "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+    "Y_e": samples['Y_e_all'][location_index],
+    "location_index": location_index,
+    "n_samples": samples["n_samples"],
+}
+samples_for_location = EpistemicSamples(**samples_for_location)
+fig = plt.figure(figsize=(15, 5))
+for i, wl in enumerate(config.WARMING_OPTS):
+    ax = fig.add_subplot(2,1,i+1)
+    for d in range(config.N_DECISIONS):
+        ax.hist(samples_for_location.Y_e[samples_for_location.X_e['Warming level'] == wl, d], bins=30, color = cols(d), alpha=0.5, label=config.DECISION_LABELS[d])
+        ax.axvline(samples_for_location.Y_e[samples_for_location.X_e['Warming level'] == wl, d].mean(), linestyle="--", color=cols(d))
+        ax.set_title(f"{wl} warming level")
+plt.show()
+
+# For location 3, split up the plot by levels of vuln2
+fig = plt.figure(figsize=(15, 5))
+for i, v2 in enumerate(config.VULN2_OPTS):
+    ax = fig.add_subplot(3,1,i+1)
+    for d in range(config.N_DECISIONS):
+        ax.hist(samples_for_location.Y_e[samples_for_location.X_e['Vulnerability parameter 2'] == v2, d], bins=30, color = cols(d), alpha=0.5, label=config.DECISION_LABELS[d])
+        ax.axvline(samples_for_location.Y_e[samples_for_location.X_e['Vulnerability parameter 2'] == v2, d].mean(), linestyle="--", color=cols(d))
+        ax.set_title(f"{v2} vulnerability parameter 2")
 plt.show()
 
 # ---- Modified PAWN: Plot PMFs for three locations x each epistemic input ----
@@ -372,4 +404,77 @@ for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake Dis
     ax.set_title(f"({chr(97 + i)})")
 plt.tight_layout()
 plt.savefig(config.FIGURES_DIR / "dc_bargraphs.png")
+plt.show()
+
+# ---- VoI: map of VoI for all inputs across all locations ----
+fig = plt.figure(figsize=(18,8))
+for i, input_i in enumerate(voi_results['labels']):
+    ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
+    scatter = ax.scatter(longitudes, latitudes, c=voi_results['evppi'][:, i], s=10, cmap="Blues", norm=LogNorm(vmin=0.0001, vmax=583000))
+    ax.set_title(f"({chr(97 + i)})")
+    ax.coastlines(linewidth=0.5)
+    cbar = plt.colorbar(scatter, ax=ax, shrink = 0.8)
+    cbar.set_label(f"$V_{{X_i}}$ for {voi_results['labels'][i]}")
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "voi_maps.png")
+plt.show()
+
+# ---- VoI: map of DC for all inputs across all locations ----
+fig = plt.figure(figsize=(18,8))
+for i, input_i in enumerate(voi_results['labels']):
+    ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
+    scatter = ax.scatter(longitudes, latitudes, c=voi_results['prob_change'][:, i], s=10, cmap="Blues", vmin=0, vmax = 1)
+    ax.set_title(f"({chr(97 + i)})")
+    ax.coastlines(linewidth=0.5)
+    cbar = plt.colorbar(scatter, ax=ax, shrink = 0.8)
+    cbar.set_label(f"$DC$ for {voi_results['labels'][i]}")
+plt.tight_layout()
+plt.savefig(config.FIGURES_DIR / "dc_maps.png")
+plt.show()
+
+# ---- PAWN vs. VoI: scatter plot of S_i vs. VoI for all locations ----
+fig, axes = plt.subplots(2, 5, figsize=(18, 8))
+latitudes = np.asarray(voi_results['lat'])
+# color_norm = plt.Normalize(vmin=latitudes.min(), vmax=latitudes.max())
+for i, input_i in enumerate(voi_results['labels']):
+    ax = axes.flat[i]
+    scatter = ax.scatter(pawn_results['max_dist_mean'][:, i],
+                         voi_results['evppi'][:, i],
+                        #  c=latitudes,
+                        #  cmap="viridis",
+                        #  norm=color_norm,
+                         s=10, alpha=1.0)
+    ax.set_yscale('log')
+    ax.set_title(f"({chr(97 + i)})")
+    ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
+    ax.set_ylabel(f"$V_{{X_i}}$ for {voi_results['labels'][i]}")
+# cbar = fig.colorbar(scatter, ax=axes.ravel().tolist(), fraction=0.02, pad=0.02)
+# cbar.set_label("Latitude")
+# plt.tight_layout(rect=[0, 0, 0.85, 1])
+plt.tight_layout()
+# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
+plt.show()
+
+# ---- PAWN vs. VoI: scatter plot of S_i vs. DC for all locations ----
+fig, axes = plt.subplots(2, 5, figsize=(18, 8))
+latitudes = np.asarray(voi_results['lat'])
+# color_norm = plt.Normalize(vmin=latitudes.min(), vmax=latitudes.max())
+for i, input_i in enumerate(voi_results['labels']):
+    ax = axes.flat[i]
+    scatter = ax.scatter(pawn_results['max_dist_mean'][:, i],
+                         voi_results['prob_change'][:, i],
+                        #  c=latitudes,
+                        #  cmap="viridis",
+                        #  norm=color_norm,
+                         s=10,
+                         alpha=1.0)
+    ax.set_yscale('log')
+    ax.set_title(f"({chr(97 + i)})")
+    ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
+    ax.set_ylabel(f"$DC_{{X_i}}$ for {voi_results['labels'][i]}")
+# cbar = fig.colorbar(scatter, ax=axes.ravel().tolist(), fraction=0.02, pad=0.02)
+# cbar.set_label("Latitude")
+# plt.tight_layout(rect=[0, 0, 0.85, 1])
+plt.tight_layout()
+# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
 plt.show()
