@@ -1,5 +1,5 @@
 """
-Apply the modified PAWN (PAWN on PMFs) sensitivity method to the shared
+Apply the modified PAWN sensitivity method to the shared
 X_e / Y_e(d) sample base produced by sampling.py.
 
 PAWN's decision output Y is d = argmax_d u(Y_e(d), d) - the same
@@ -7,14 +7,7 @@ epistemically-conditioned decision VoI's d_opt is built from (see
 sampling.py's module docstring and the methods chapter for the
 rationale for restricting PAWN to X_e).
 
-NOTE: safepython.PAWN_pmf is NOT part of the released `safepython` pip
-package (only PAWN, VBSA, RSA_groups, etc. are) - it's custom to your
-fork (github.com/babichmorrowc/SAFE-python). Make sure that fork's
-PAWN_pmf.py is importable as safepython.PAWN_pmf in your environment
-(e.g. `pip install git+https://github.com/babichmorrowc/SAFE-python.git`,
-or drop PAWN_pmf.py into your installed safepython package directory).
-Everything else this module needs (pawn_split_sample, pawn_ks, allrange,
-aggregate_boot) is already in the standard pip package.
+NOTE: safepython.PAWN_pmf is part of my fork (github.com/babichmorrowc/SAFE-python)
 """
 from dataclasses import dataclass
 

@@ -10,9 +10,7 @@ NB on runtime: each location fits a LOESS smoother per (continuous input,
 decision) pair - 5 continuous inputs x 3 decisions = 15 LOESS fits per
 location, on top of the 5 categorical inputs' (cheap) group means. LOESS
 is roughly O(N^2) per fit without further tuning, so with thousands of
-samples per location this can add up over ~1700 locations. Test on a
-small subset first (location_indices=[...]) to gauge timing before
-running the full set.
+samples per location this can add up over ~1700 locations.
 """
 import time
 

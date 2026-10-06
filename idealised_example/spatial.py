@@ -7,10 +7,6 @@ This is computed once per run (not per location, and not per sample) and
 is independent of which epistemic input samples get drawn afterwards -
 sampling.generate_location_samples takes the resulting `ind` array as an
 input.
-
-NOTE: get_Exp and get_ind_lat_lon are imported from location_funcs,
-treated here as a fixed black box. Not executed against the real data in
-this environment - please verify against your actual location_funcs.py.
 """
 from dataclasses import dataclass
 

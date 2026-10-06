@@ -5,8 +5,7 @@ bootstrap CIs) to a single file for later mapping.
 
 Run from the directory containing config.py, sampling.py,
 precompute_samples.py, modified_pawn.py, and samples_cache.npz (built by
-precompute_samples.py - re-run that first if Y_e's computation has
-changed, e.g. after the zero-population fix).
+precompute_samples.py).
 """
 import numpy as np
 
