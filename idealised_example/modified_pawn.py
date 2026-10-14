@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import matplotlib.pyplot as plt
+from safepython.PAWN import pawn_split_sample
 from safepython.PAWN_pmf import pawn_pmf_indices
 from safepython.util import aggregate_boot
 
@@ -35,6 +36,9 @@ class PawnResult:
         per the methods chapter's Equation for S_i.
     max_dist_lb, max_dist_ub : np.ndarray, shape (M,)
         Bootstrap confidence interval bounds for max_dist_mean.
+    max_dist_dummy : np.ndarray, shape (Nboot,)
+        Maximum vertical distance for a dummy input (one value per
+        bootstrap resample)
     degenerate : bool
         True if every sample at this location picked the same decision,
         making the sensitivity index undefined (all arrays are NaN in
@@ -44,6 +48,10 @@ class PawnResult:
     max_dist_mean: np.ndarray
     max_dist_lb: np.ndarray
     max_dist_ub: np.ndarray
+    max_dist_dummy: np.ndarray = np.nan
+    mean_across_dummy: float = np.nan
+    dummy_lb: float = np.nan
+    dummy_ub: float = np.nan
     degenerate: bool = False
 
 
@@ -90,11 +98,49 @@ def encode_Xe_numeric(X_e: dict) -> np.ndarray:
         X_numeric[:, j] = columns[label]
     return X_numeric
 
+# def get_group_indices(X_numeric, n_intervals):
+#     """Row indices of the samples in each conditioning interval, per input.
+
+#     Calls the fork's own splitting routine with Y = row number, so YY[i][k]
+#     returns the row indices belonging to interval k of input i.
+#     Depends only on X, so it is computed once and reused for every permutation.
+#     """
+#     N = X_numeric.shape[0]
+#     YY, _, _, n_eff, _, _ = pawn_split_sample(X_numeric, np.arange(N, dtype=float), n_intervals)
+#     return [[np.asarray(g).ravel().astype(int) for g in YY[i]] for i in range(len(YY))]
+
+# # Is this redundant?
+# def pawn_stat(groups_i, y, p_u, n_dec):
+#     """S_i: mean over intervals of max_d |p_c(d) - p_u(d)|."""
+#     dists = [np.abs(np.bincount(y[g], minlength=n_dec) / len(g) - p_u).max()
+#              for g in groups_i]
+#     return np.mean(dists)
+
+# def pawn_permutation_test(X_numeric, y, n_perm=1000,
+#                           n_intervals=cfg.PAWN_N_CONDITIONING_INTERVALS, rng=None):
+#     """Permutation test of H0: the optimal decision is independent of X_i.
+#     Returns (s_obs, p), each shape (M,)."""
+#     rng = rng or np.random.default_rng(cfg.SEED)      # adapt to your config's seed name
+#     y = y.astype(int)
+#     n_dec = y.max() + 1
+#     p_u = np.bincount(y, minlength=n_dec) / len(y)    # invariant under permutation
+#     groups = get_group_indices(X_numeric, n_intervals)
+#     M = len(groups)
+
+#     s_obs = np.array([pawn_stat(groups[j], y, p_u, n_dec) for j in range(M)])
+#     exceed = np.zeros(M)
+#     for _ in range(n_perm):
+#         y_perm = rng.permutation(y)
+#         for j in range(M):
+#             if pawn_stat(groups[j], y_perm, p_u, n_dec) >= s_obs[j]:
+#                 exceed[j] += 1
+#     return s_obs, (1 + exceed) / (n_perm + 1)
 
 def compute_pawn_indices(
     samples: EpistemicSamples,
     n_conditioning_intervals: int = cfg.PAWN_N_CONDITIONING_INTERVALS,
     n_bootstrap: int = cfg.PAWN_N_BOOTSTRAP,
+    dummy: bool = True
 ) -> PawnResult:
     """Compute the modified-PAWN sensitivity index for every epistemic input.
 
@@ -124,22 +170,37 @@ def compute_pawn_indices(
         )
 
     # max_dist_mean_boot: shape (Nboot, M) - the "mean across conditioning
-    # intervals" statistic, per bootstrap resample. The methods chapter
-    # specifies the mean as the summary statistic for S_i (median and max
+    # intervals" statistic, per bootstrap resample. (median and max
     # are also returned by pawn_pmf_indices but not used here).
-    _, max_dist_mean_boot, _ = pawn_pmf_indices(
-        X_numeric, Y, n=n_conditioning_intervals, Nboot=n_bootstrap
+    # max_dist_dummy: shape (Nboot, ) - the maximum distance of a dummy input
+    _, max_dist_mean_boot, _, max_dist_dummy = pawn_pmf_indices(
+        X_numeric, Y, n=n_conditioning_intervals, Nboot=n_bootstrap,
+        dummy=dummy
     )
     mean_across_boot, lb, ub = aggregate_boot(max_dist_mean_boot)
+
+    if dummy:
+        # Calculate the parallel to aggregate_boot for the dummy input, which is a single value per bootstrap resample
+        mean_across_dummy = np.nanmean(max_dist_dummy)
+        dummy_lb = np.nanpercentile(max_dist_dummy, 2.5)
+        dummy_ub = np.nanpercentile(max_dist_dummy, 97.5)
+    else:
+        mean_across_dummy = np.nan
+        dummy_lb = np.nan
+        dummy_ub = np.nan
 
     return PawnResult(
         labels=list(cfg.X_E_LABELS),
         max_dist_mean=mean_across_boot,
         max_dist_lb=lb,
         max_dist_ub=ub,
+        max_dist_dummy=max_dist_dummy,
+        mean_across_dummy=mean_across_dummy,
+        dummy_lb=dummy_lb,
+        dummy_ub=dummy_ub
     )
 
-def plot_pawn_bargraph(result: PawnResult, location_index: int, ax=None, **kwargs):
+def plot_pawn_bargraph(result: PawnResult, location_index: int, dummy: bool, ax=None, **kwargs):
     original_errors = np.array([result.max_dist_lb, result.max_dist_ub])
     error_bars = np.zeros_like(original_errors)
     error_bars[0, :] = result.max_dist_mean - original_errors[0, :]
@@ -151,8 +212,21 @@ def plot_pawn_bargraph(result: PawnResult, location_index: int, ax=None, **kwarg
         fig = ax.figure
 
     ax.bar(result.labels, result.max_dist_mean, yerr=error_bars, **kwargs)
+    if dummy:
+        ax.axhline(result.mean_across_dummy, color="red", linestyle="--",
+                #    label="Dummy mean"
+                   )
+        ax.axhspan(
+            result.dummy_lb,
+            result.dummy_ub,
+            color="red",
+            alpha=0.2,
+            # label="Dummy 95% CI"
+        )
+        ax.legend()
     ax.set_title(f"Modified PAWN sensitivity index for location {location_index}")
     ax.set_xlabel("Input")
     ax.set_ylabel("Sensitivity index")
     ax.tick_params(axis="x", rotation=45)
     return ax
+

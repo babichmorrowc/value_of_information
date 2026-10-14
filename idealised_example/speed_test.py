@@ -1,5 +1,6 @@
 # Compare the speed of modified PAWN to VoI in one location
 import time
+import matplotlib.pyplot as plt
 import precompute_samples as pc
 import modified_pawn
 import voi
@@ -14,6 +15,8 @@ loc_index = 241
 start_time = time.time()
 samples = pc.get_location_samples(cache, location_index=int(loc_index))
 pawn_result = modified_pawn.compute_pawn_indices(samples)
+# modified_pawn.plot_pawn_bargraph(pawn_result, location_index=loc_index, dummy=True)
+# plt.show()
 pawn_time = time.time() - start_time
 print(f"Modified PAWN took {pawn_time:.3f} seconds for location {loc_index}")
 

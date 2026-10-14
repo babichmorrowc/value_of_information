@@ -268,7 +268,7 @@ for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake Dis
     }
     samples_for_location = EpistemicSamples(**samples_for_location)
     pawn_indices = compute_pawn_indices(samples_for_location)
-    ax = plot_pawn_bargraph(pawn_indices, location_index=location_index, ax=axes[i])
+    ax = plot_pawn_bargraph(pawn_indices, location_index=location_index, dummy=True, ax=axes[i])
     ax.set_xticks(ticks = range(len(config.X_E_SHORT_LABELS)),
                   labels = config.X_E_SHORT_LABELS)
     ax.set_ylim(0, 0.3)
