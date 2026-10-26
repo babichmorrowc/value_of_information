@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap, LogNorm
 import cartopy.crs as ccrs
 import numpy as np
-from safepython.PAWN_pmf import pawn_plot_pmf
+from safepython.PAWN_pmf import pawn_plot_pmf, pawn_plot_pmf_by_input
 
 import config
 from sampling import EpistemicSamples
@@ -172,6 +172,23 @@ plt.show()
 # plt.show()
 
 # ---- Modified PAWN: PMF figures for each location saved separately ----
+# pawn_plot_pmf creates its own figure and uses Matplotlib's default size.
+# Set the intended size explicitly for these standalone 5x2 PMF plots.
+plt.rcParams["figure.figsize"] = (15, 8)
+
+# Set the tick labels for the colorbar:
+cbar_labels = [
+        ['U', 'BC', 'CF'],
+        None,
+        ['1', '2', '5'],
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None]
+
 location_index = config.LOCATION_INDICES[0]  # London
 samples_for_location = {
     "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
@@ -183,7 +200,7 @@ X_numeric = encode_Xe_numeric(samples_for_location["X_e"])
 utilities = compute_utilities(samples_for_location["Y_e"])
 Y = np.argmax(utilities, axis=1).astype(float)
 
-pawn_plot_pmf(
+YF, FU, FC, xc = pawn_plot_pmf(
     X=X_numeric,
     Y=Y,
     n_col=5,
@@ -191,12 +208,27 @@ pawn_plot_pmf(
     cbar=True,
     labelinput=config.X_E_SHORT_LABELS,
     Y_Label="Optimal decision",
+    cbar_ticklabels=cbar_labels
 )
 # Add 1 to all x-axis tick labels since decisions are 1-indexed
-for ax in plt.gcf().axes[:-1]:
-    ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
+for ax in plt.gcf().axes:
+    if ax.get_label() != "<colorbar>":
+        ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
 
 # plt.savefig(config.FIGURES_DIR / "london_pmf.png")
+plt.show()
+
+# Figure with line plots of the PMFs for each input, for London
+pawn_plot_pmf_by_input(
+    YF, FU, FC, xc, n_col=2,
+    X_Labels=config.X_E_SHORT_LABELS,
+    X_ticklabels=cbar_labels,
+    colors=config.DECISION_COLORS,
+    colorbar_label = "Optimal decision",
+    colorbar_ticklabels=["1", "2", "3"]
+)
+
+# plt.savefig(config.FIGURES_DIR / "london_pmf_by_input.png")
 plt.show()
 
 # Lake District:
@@ -211,7 +243,7 @@ X_numeric = encode_Xe_numeric(samples_for_location["X_e"])
 utilities = compute_utilities(samples_for_location["Y_e"])
 Y = np.argmax(utilities, axis=1).astype(float)
 
-pawn_plot_pmf(
+YF, FU, FC, xc = pawn_plot_pmf(
     X=X_numeric,
     Y=Y,
     n_col=5,
@@ -219,12 +251,26 @@ pawn_plot_pmf(
     cbar=True,
     labelinput=config.X_E_SHORT_LABELS,
     Y_Label="Optimal decision",
+    cbar_ticklabels=cbar_labels
 )
 # Add 1 to all x-axis tick labels since decisions are 1-indexed
-for ax in plt.gcf().axes[:-1]:
-    ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
+for ax in plt.gcf().axes:
+    if ax.get_label() != "<colorbar>":
+        ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
 
 # plt.savefig(config.FIGURES_DIR / "lakedistrict_pmf.png")
+plt.show()
+
+# Figure with line plots of the PMFs for each input, for Lake District
+pawn_plot_pmf_by_input(
+    YF, FU, FC, xc, n_col=2,
+    X_Labels=config.X_E_SHORT_LABELS,
+    X_ticklabels=cbar_labels,
+    colors=config.DECISION_COLORS,
+    colorbar_label = "Optimal decision",
+    colorbar_ticklabels=["1", "2", "3"]
+)
+plt.savefig(config.FIGURES_DIR / "lakedistrict_pmf_by_input.png")
 plt.show()
 
 # Scotland:
@@ -239,7 +285,7 @@ X_numeric = encode_Xe_numeric(samples_for_location["X_e"])
 utilities = compute_utilities(samples_for_location["Y_e"])
 Y = np.argmax(utilities, axis=1).astype(float)
 
-pawn_plot_pmf(
+YF, FU, FC, xc = pawn_plot_pmf(
     X=X_numeric,
     Y=Y,
     n_col=5,
@@ -247,12 +293,26 @@ pawn_plot_pmf(
     cbar=True,
     labelinput=config.X_E_SHORT_LABELS,
     Y_Label="Optimal decision",
+    cbar_ticklabels=cbar_labels
 )
 # Add 1 to all x-axis tick labels since decisions are 1-indexed
-for ax in plt.gcf().axes[:-1]:
-    ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
+for ax in plt.gcf().axes:
+    if ax.get_label() != "<colorbar>":
+        ax.set_xticks(ticks=range(config.N_DECISIONS), labels=range(1, 1 + config.N_DECISIONS))
 
 # plt.savefig(config.FIGURES_DIR / "scotland_pmf.png")
+plt.show()
+
+# Figure with line plots of the PMFs for each input, for Scotland
+pawn_plot_pmf_by_input(
+    YF, FU, FC, xc, n_col=2,
+    X_Labels=config.X_E_SHORT_LABELS,
+    X_ticklabels=cbar_labels,
+    colors=config.DECISION_COLORS,
+    colorbar_label = "Optimal decision",
+    colorbar_ticklabels=["1", "2", "3"]
+)
+plt.savefig(config.FIGURES_DIR / "scotland_pmf_by_input.png")
 plt.show()
 
 # ---- Modified PAWN: Barplot of PAWN sensitivity indices for each epistemic input ----
