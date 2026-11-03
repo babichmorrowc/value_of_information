@@ -112,4 +112,4 @@ def load_voi_results(path: str = "voi_results.npz") -> dict:
 
 
 if __name__ == "__main__":
-    run_voi_all_locations()
+    run_voi_all_locations(out_path="voi_results_it0.npz")

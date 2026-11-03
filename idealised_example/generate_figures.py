@@ -26,7 +26,7 @@ longitudes = samples["lon"]
 pawn_results = rpa.load_pawn_results("pawn_results.npz")
 
 # ---- Load VoI results ----
-voi_results = run_voi.load_voi_results("voi_results.npz")
+voi_results = run_voi.load_voi_results("voi_results_it0.npz")
 
 # ---- Plotting set-up ----
 # Set up colors for plotting
@@ -527,6 +527,9 @@ barplot_with_ci(results, "prob_change", "pc_ci_low", "pc_ci_high",
                 "Probability of decision change", "dc_bargraphs.png", ylim=(0, 1))
 
 # ---- VoI: map of VoI for all inputs across all locations ----
+# Get min and max VoI value for setting the color scale
+min_evppi = np.min(voi_results['evppi']) # -2531.767767497804
+max_evppi = np.max(voi_results['evppi']) # -2531.767767497804
 fig = plt.figure(figsize=(18,8))
 for i, input_i in enumerate(voi_results['labels']):
     ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
@@ -540,10 +543,13 @@ plt.savefig(config.FIGURES_DIR / "voi_maps.png")
 plt.show()
 
 # ---- VoI: map of DC for all inputs across all locations ----
+# Get min and max probability of decision change for setting the color scale
+min_pc = np.min(voi_results['prob_change']) # 0%
+max_pc = np.max(voi_results['prob_change']) # 66.89%
 fig = plt.figure(figsize=(18,8))
 for i, input_i in enumerate(voi_results['labels']):
     ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
-    scatter = ax.scatter(longitudes, latitudes, c=voi_results['prob_change'][:, i], s=10, cmap="Blues", vmin=0, vmax = 1)
+    scatter = ax.scatter(longitudes, latitudes, c=voi_results['prob_change'][:, i], s=10, cmap="Blues", vmin=0, vmax = 0.7)
     ax.set_title(f"({chr(97 + i)})")
     ax.coastlines(linewidth=0.5)
     cbar = plt.colorbar(scatter, ax=ax, shrink = 0.8)
@@ -564,7 +570,7 @@ for i, input_i in enumerate(voi_results['labels']):
                         #  cmap="viridis",
                         #  norm=color_norm,
                          s=10, alpha=1.0)
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_title(f"({chr(97 + i)})")
     ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
     ax.set_ylabel(f"$V_{{X_i}}$ for {voi_results['labels'][i]}")
@@ -572,7 +578,7 @@ for i, input_i in enumerate(voi_results['labels']):
 # cbar.set_label("Latitude")
 # plt.tight_layout(rect=[0, 0, 0.85, 1])
 plt.tight_layout()
-# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
+plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
 plt.show()
 
 # ---- PAWN vs. VoI: scatter plot of S_i vs. DC for all locations ----
@@ -588,7 +594,7 @@ for i, input_i in enumerate(voi_results['labels']):
                         #  norm=color_norm,
                          s=10,
                          alpha=1.0)
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_title(f"({chr(97 + i)})")
     ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
     ax.set_ylabel(f"$DC_{{X_i}}$ for {voi_results['labels'][i]}")
@@ -596,5 +602,5 @@ for i, input_i in enumerate(voi_results['labels']):
 # cbar.set_label("Latitude")
 # plt.tight_layout(rect=[0, 0, 0.85, 1])
 plt.tight_layout()
-# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
+plt.savefig(config.FIGURES_DIR / "dc_vs_pawn.png")
 plt.show()
