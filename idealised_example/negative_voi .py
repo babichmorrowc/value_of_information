@@ -35,6 +35,10 @@ cols = ListedColormap(config.DECISION_COLORS)
 risk_inputs = config.X_E_LABELS[:5]
 decision_inputs = config.X_E_LABELS[5:]
 
+
+CAT = {"Calibration method", "Warming level", "SSP",
+       "Vulnerability parameter 1", "Vulnerability parameter 2"}
+
 # ---- Functions ----
 def evppi_diagnostics(s, label, frac=0.3):
     x = s.X_e[label]
@@ -145,9 +149,6 @@ zs = np.array([z_for(samples, l, labels[i]) for l, i in zip(locs, inps)])
 print(f"{len(zs)} negative pairs; fraction with z < -2: {np.mean(zs < -2):.1%}; min z: {zs.min():.2f}")
 # 380 negative pairs; fraction with z < -2: 54.5%; min z: -30.36
 
-CAT = {"Calibration method", "Warming level", "SSP",
-       "Vulnerability parameter 1", "Vulnerability parameter 2"}
-
 # the 20 most negative-z pairs
 order_zs = np.argsort(zs)[:20]
 for k in order_zs:
@@ -176,7 +177,6 @@ plot_index(LOC, latitudes, longitudes)
 plt.show()
 
 # ---- Build samples for this location (X_e shared across locations) ----
-samples = load_precomputed()
 s = EpistemicSamples(
     X_e={k: samples["X_e"][k] for k in config.X_E_LABELS},
     Y_e=samples["Y_e_all"][LOC],
