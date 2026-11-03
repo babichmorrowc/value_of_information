@@ -50,15 +50,15 @@ def _smooth_categorical(x, u_d, x_eval):
     return np.array([group_means[val] for val in np.asarray(x_eval)])
 
 
-def _smooth_continuous(x, u_d, x_eval, frac):
+def _smooth_continuous(x, u_d, x_eval, frac, it):
     """LOESS smoother for a continuous input, evaluated at x_eval."""
     x = np.asarray(x, dtype=float)
     u_d = np.asarray(u_d, dtype=float)
     x_eval = np.asarray(x_eval, dtype=float)
-    return lowess(u_d, x, frac=frac, xvals=x_eval, is_sorted=False)
+    return lowess(u_d, x, frac=frac, it=it, xvals=x_eval, is_sorted=False)
 
 
-def fit_smoothing_estimator(x, u_d, input_label: str, x_eval=None, frac: float = 0.3):
+def fit_smoothing_estimator(x, u_d, input_label: str, x_eval=None, frac: float = 0.3, it: int = 0):
     """S(x_i, d): the smoothing estimator for one input/decision, evaluated at x_eval.
 
     x_eval defaults to x itself (i.e. evaluate at the sample's own points).
@@ -67,7 +67,7 @@ def fit_smoothing_estimator(x, u_d, input_label: str, x_eval=None, frac: float =
         x_eval = x
     if input_label in CATEGORICAL_INPUTS:
         return _smooth_categorical(x, u_d, x_eval)
-    return _smooth_continuous(x, u_d, x_eval, frac)
+    return _smooth_continuous(x, u_d, x_eval, frac, it)
 
 
 @dataclass
@@ -92,7 +92,7 @@ class VoIResult:
     optimal_decision_uncertain: int
 
 
-def compute_evppi(samples: EpistemicSamples, input_label: str, frac: float = 0.3) -> VoIResult:
+def compute_evppi(samples: EpistemicSamples, input_label: str, frac: float = 0.3, it: int = 0) -> VoIResult:
     """Compute EVPPI and probability of decision change for one input.
 
     Implements Straub et al. (2025) Eq. 30: S is used only to pick the
@@ -105,7 +105,7 @@ def compute_evppi(samples: EpistemicSamples, input_label: str, frac: float = 0.3
 
     smoothed = np.empty((N, n_decisions))
     for d in range(n_decisions):
-        smoothed[:, d] = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=x, frac=frac)
+        smoothed[:, d] = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=x, frac=frac, it=it)
 
     # a_opt|X_i^(k) = argmax_d S(x_i^(k), d) - smoothing picks the decision only
     optimal_decisions_perfect_info = np.argmax(smoothed, axis=1)
@@ -127,16 +127,58 @@ def compute_evppi(samples: EpistemicSamples, input_label: str, frac: float = 0.3
         optimal_decision_uncertain=optimal_decision_uncertain,
     )
 
+def _evppi_core(x, utilities, input_label, frac, it):
+    N, D = utilities.shape
+    smoothed = np.column_stack([
+        fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=x, frac=frac, it=it)
+        for d in range(D)
+    ])
+    d_star = smoothed.argmax(axis=1)
+    d_opt = int(utilities.mean(axis=0).argmax())      # recomputed on whatever data it is given
+    u_pi = utilities[np.arange(N), d_star]
+    evppi = float(u_pi.mean() - utilities[:, d_opt].mean())
+    prob_change = float(np.mean(d_star != d_opt))
+    return evppi, prob_change, d_opt
 
-def compute_all_evppi(samples: EpistemicSamples, frac: float = 0.3) -> list:
+def compute_evppi_bootstrap(samples, input_label, frac=0.3, it=0, n_boot=200, alpha=0.05, seed=0):
+    x = np.asarray(samples.X_e[input_label])           # don't cast to float: categorical inputs may be strings
+    utilities = compute_utilities(samples.Y_e)
+    N = utilities.shape[0]
+    rng = np.random.default_rng(seed)
+
+    evppi, prob_change, d_opt = _evppi_core(x, utilities, input_label, frac, it)
+
+    boot = np.empty((n_boot, 2))
+    for b in range(n_boot):
+        idx = rng.integers(0, N, N)                    # resample whole rows
+        boot[b] = _evppi_core(x[idx], utilities[idx], input_label, frac, it)[:2]
+
+    q = [100 * alpha / 2, 100 * (1 - alpha / 2)]
+    ev_lo, ev_hi = np.percentile(boot[:, 0], q)
+    pc_lo, pc_hi = np.percentile(boot[:, 1], q)
+
+    return dict(
+        evppi=evppi,
+        evppi_ci_low=float(ev_lo), evppi_ci_high=float(ev_hi), evppi_se=float(boot[:, 0].std(ddof=1)),
+        prob_change=prob_change,
+        pc_ci_low=float(pc_lo), pc_ci_high=float(pc_hi),
+        d_opt=d_opt,
+    )  
+
+
+def compute_all_evppi(samples: EpistemicSamples, frac: float = 0.3, it: int = 0, bootstrap: bool = False) -> list:
     """Compute VoIResult for every epistemic input, in cfg.X_E_LABELS order."""
-    return [compute_evppi(samples, label, frac=frac) for label in cfg.X_E_LABELS]
+    if bootstrap:
+        return [compute_evppi_bootstrap(samples, label, frac=frac, it=it) for label in cfg.X_E_LABELS]
+    else:
+        return [compute_evppi(samples, label, frac=frac, it=it) for label in cfg.X_E_LABELS]
 
 
 def plot_smoothing_estimator(
     samples: EpistemicSamples,
     input_label: str,
     frac: float = 0.3,
+    it: int = 0,
     location_index=None,
     ax=None,
     decision_index=None,
@@ -174,13 +216,13 @@ def plot_smoothing_estimator(
 
         if is_categorical:
             categories = np.unique(x)
-            smoothed_vals = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=categories)
+            smoothed_vals = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=categories, it=it)
             ax.scatter(categories, smoothed_vals, color="black", marker="D", s=70, zorder=5)
         else:
             order = np.argsort(x)
             x_sorted = np.asarray(x)[order]
             smoothed_vals = fit_smoothing_estimator(
-                x, utilities[:, d], input_label, x_eval=x_sorted, frac=frac
+                x, utilities[:, d], input_label, x_eval=x_sorted, frac=frac, it=it
             )
             ax.plot(x_sorted, smoothed_vals, color="black", linewidth=2)
 
@@ -213,13 +255,13 @@ def plot_smoothing_estimator(
 
         if is_categorical:
             categories = np.unique(x)
-            smoothed_vals = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=categories)
+            smoothed_vals = fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=categories, it=it)
             ax_d.scatter(categories, smoothed_vals, color="black", marker="D", s=70, zorder=5)
         else:
             order = np.argsort(x)
             x_sorted = np.asarray(x)[order]
             smoothed_vals = fit_smoothing_estimator(
-                x, utilities[:, d], input_label, x_eval=x_sorted, frac=frac
+                x, utilities[:, d], input_label, x_eval=x_sorted, frac=frac, it=it
             )
             ax_d.plot(x_sorted, smoothed_vals, color="black", linewidth=2)
 

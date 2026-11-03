@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap, LogNorm
 import cartopy.crs as ccrs
 import numpy as np
+import pickle
 from safepython.PAWN_pmf import pawn_plot_pmf, pawn_plot_pmf_by_input
 
 import config
@@ -25,7 +26,7 @@ longitudes = samples["lon"]
 pawn_results = rpa.load_pawn_results("pawn_results.npz")
 
 # ---- Load VoI results ----
-voi_results = run_voi.load_voi_results("voi_results.npz")
+voi_results = run_voi.load_voi_results("voi_results_it0.npz")
 
 # ---- Plotting set-up ----
 # Set up colors for plotting
@@ -416,57 +417,119 @@ plt.tight_layout()
 plt.savefig(config.FIGURES_DIR / "voi_smoothing_lake_district.png")
 plt.show()
 
-# ---- VoI: barplot of VoI values in all 3 locations ----
-# In a 3 panel figure
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
-    samples_for_location = {
-        "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
-        "Y_e": samples['Y_e_all'][location_index],
-        "location_index": location_index,
-        "n_samples": samples["n_samples"]
-    }
-    samples_for_location = EpistemicSamples(**samples_for_location)
-    voi_results = compute_all_evppi(samples_for_location)
-    voi_vals = [r.evppi for r in voi_results]
+# # ---- VoI: barplot of VoI values in all 3 locations ----
+# # In a 3 panel figure
+# fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+# for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
+#     samples_for_location = {
+#         "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+#         "Y_e": samples['Y_e_all'][location_index],
+#         "location_index": location_index,
+#         "n_samples": samples["n_samples"]
+#     }
+#     samples_for_location = EpistemicSamples(**samples_for_location)
+#     voi_results = compute_all_evppi(samples_for_location)
+#     voi_vals = [r['evppi'] for r in voi_results]
+#     # Confidence intervals for the bootstrapped EVPPI
+#     evppi_ci_low = [r['evppi_ci_low'] for r in voi_results]
+#     evppi_ci_high = [r['evppi_ci_high'] for r in voi_results]
 
-    ax = axes[i]
+#     ax = axes[i]
+#     x = np.arange(len(config.X_E_SHORT_LABELS))
+#     ax.bar(x, voi_vals, yerr=[np.array(voi_vals) - np.array(evppi_ci_low), np.array(evppi_ci_high) - np.array(voi_vals)], capsize=5)
+#     ax.set_xticks(x)
+#     ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
+#     ax.set_ylabel("Value of information")
+#     ax.set_title(f"({chr(97 + i)})")
+# plt.tight_layout()
+# plt.savefig(config.FIGURES_DIR / "voi_bargraphs.png")
+# plt.show()
+
+# # ---- VoI: barplot of probability of decision change in all 3 locations ----
+# # In a 3 panel figure
+# fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+# for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
+#     samples_for_location = {
+#         "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
+#         "Y_e": samples['Y_e_all'][location_index],
+#         "location_index": location_index,
+#         "n_samples": samples["n_samples"]
+#     }
+#     samples_for_location = EpistemicSamples(**samples_for_location)
+#     voi_results = compute_all_evppi(samples_for_location)
+#     dc_vals = [r['prob_change'] for r in voi_results]
+#     # Confidence intervals for the bootstrapped probability of decision change
+#     pc_ci_low = [r['pc_ci_low'] for r in voi_results]
+#     pc_ci_high = [r['pc_ci_high'] for r in voi_results]
+
+#     ax = axes[i]
+#     x = np.arange(len(config.X_E_SHORT_LABELS))
+#     ax.bar(x, dc_vals, yerr=[np.array(dc_vals) - np.array(pc_ci_low), np.array(pc_ci_high) - np.array(dc_vals)], capsize=5)
+#     ax.set_xticks(x)
+#     ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
+#     ax.set_ylabel("Probability of decision change")
+#     ax.set_title(f"({chr(97 + i)})")
+# plt.tight_layout()
+# plt.savefig(config.FIGURES_DIR / "dc_bargraphs.png")
+# plt.show()
+
+# ---- VoI: combined barplots of both information value and probability of decision change ----
+cache_path = config.FIGURES_DIR / "voi_bootstrap_results.pkl"
+
+# ---- Compute once (slow: bootstrap) ----
+results = []
+for location_index in config.LOCATION_INDICES:
+    s = EpistemicSamples(
+        X_e={key: samples["X_e"][key] for key in config.X_E_LABELS},
+        Y_e=samples["Y_e_all"][location_index],
+        location_index=location_index,
+        n_samples=samples["n_samples"],
+    )
+    results.append(compute_all_evppi(s, bootstrap=True))   # list of dicts, one per input
+
+with open(cache_path, "wb") as f:
+    pickle.dump(results, f)
+
+# To re-plot later without recomputing:
+# with open(cache_path, "rb") as f:
+#     results = pickle.load(f)
+
+# Plots
+def yerr(vals, lo, hi):
+    vals, lo, hi = (np.asarray(a, dtype=float) for a in (vals, lo, hi))
+    return np.array([np.maximum(vals - lo, 0), np.maximum(hi - vals, 0)])  # must be non-negative
+
+def barplot_with_ci(results, val_key, lo_key, hi_key, ylabel, filename, ylim=None):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))   # no sharing: each panel has its own y-axis
     x = np.arange(len(config.X_E_SHORT_LABELS))
-    ax.bar(x, voi_vals)
-    ax.set_xticks(x)
-    ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
-    ax.set_ylabel("Value of information")
-    ax.set_title(f"({chr(97 + i)})")
-plt.tight_layout()
-plt.savefig(config.FIGURES_DIR / "voi_bargraphs.png")
-plt.show()
+    for j, res in enumerate(results):
+        vals = [r[val_key] for r in res]
+        lo = [r[lo_key] for r in res]
+        hi = [r[hi_key] for r in res]
+        ax = axes[j]
+        ax.bar(x, vals, yerr=yerr(vals, lo, hi), capsize=5)
+        ax.set_xticks(x)
+        ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"({chr(97 + j)})")
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+    plt.tight_layout()
+    plt.savefig(config.FIGURES_DIR / filename, dpi=300)
+    plt.show()
 
-# ---- VoI: barplot of probability of decision change in all 3 locations ----
-# In a 3 panel figure
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-for i, location_index in enumerate(config.LOCATION_INDICES):  # London, Lake District, Scotland
-    samples_for_location = {
-        "X_e": {key: samples['X_e'][key] for key in config.X_E_LABELS},
-        "Y_e": samples['Y_e_all'][location_index],
-        "location_index": location_index,
-        "n_samples": samples["n_samples"]
-    }
-    samples_for_location = EpistemicSamples(**samples_for_location)
-    voi_results = compute_all_evppi(samples_for_location)
-    dc_vals = [r.prob_change for r in voi_results]
+# Value of information
+barplot_with_ci(results, "evppi", "evppi_ci_low", "evppi_ci_high",
+                "Value of information", "voi_bargraphs.png", ylim=(0,))
 
-    ax = axes[i]
-    x = np.arange(len(config.X_E_SHORT_LABELS))
-    ax.bar(x, dc_vals)
-    ax.set_xticks(x)
-    ax.set_xticklabels(config.X_E_SHORT_LABELS, rotation=45, ha="right")
-    ax.set_ylabel("Probability of decision change")
-    ax.set_title(f"({chr(97 + i)})")
-plt.tight_layout()
-plt.savefig(config.FIGURES_DIR / "dc_bargraphs.png")
-plt.show()
+# Probability of decision change
+barplot_with_ci(results, "prob_change", "pc_ci_low", "pc_ci_high",
+                "Probability of decision change", "dc_bargraphs.png", ylim=(0, 1))
 
 # ---- VoI: map of VoI for all inputs across all locations ----
+# Get min and max VoI value for setting the color scale
+min_evppi = np.min(voi_results['evppi']) # -2531.767767497804
+max_evppi = np.max(voi_results['evppi']) # -2531.767767497804
 fig = plt.figure(figsize=(18,8))
 for i, input_i in enumerate(voi_results['labels']):
     ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
@@ -480,10 +543,13 @@ plt.savefig(config.FIGURES_DIR / "voi_maps.png")
 plt.show()
 
 # ---- VoI: map of DC for all inputs across all locations ----
+# Get min and max probability of decision change for setting the color scale
+min_pc = np.min(voi_results['prob_change']) # 0%
+max_pc = np.max(voi_results['prob_change']) # 66.89%
 fig = plt.figure(figsize=(18,8))
 for i, input_i in enumerate(voi_results['labels']):
     ax = fig.add_subplot(2, 5, i + 1, projection=ccrs.PlateCarree())
-    scatter = ax.scatter(longitudes, latitudes, c=voi_results['prob_change'][:, i], s=10, cmap="Blues", vmin=0, vmax = 1)
+    scatter = ax.scatter(longitudes, latitudes, c=voi_results['prob_change'][:, i], s=10, cmap="Blues", vmin=0, vmax = 0.7)
     ax.set_title(f"({chr(97 + i)})")
     ax.coastlines(linewidth=0.5)
     cbar = plt.colorbar(scatter, ax=ax, shrink = 0.8)
@@ -504,7 +570,7 @@ for i, input_i in enumerate(voi_results['labels']):
                         #  cmap="viridis",
                         #  norm=color_norm,
                          s=10, alpha=1.0)
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_title(f"({chr(97 + i)})")
     ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
     ax.set_ylabel(f"$V_{{X_i}}$ for {voi_results['labels'][i]}")
@@ -512,7 +578,7 @@ for i, input_i in enumerate(voi_results['labels']):
 # cbar.set_label("Latitude")
 # plt.tight_layout(rect=[0, 0, 0.85, 1])
 plt.tight_layout()
-# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
+plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
 plt.show()
 
 # ---- PAWN vs. VoI: scatter plot of S_i vs. DC for all locations ----
@@ -528,7 +594,7 @@ for i, input_i in enumerate(voi_results['labels']):
                         #  norm=color_norm,
                          s=10,
                          alpha=1.0)
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_title(f"({chr(97 + i)})")
     ax.set_xlabel(f"$S_i$ for {voi_results['labels'][i]}")
     ax.set_ylabel(f"$DC_{{X_i}}$ for {voi_results['labels'][i]}")
@@ -536,5 +602,5 @@ for i, input_i in enumerate(voi_results['labels']):
 # cbar.set_label("Latitude")
 # plt.tight_layout(rect=[0, 0, 0.85, 1])
 plt.tight_layout()
-# plt.savefig(config.FIGURES_DIR / "voi_vs_pawn.png")
+plt.savefig(config.FIGURES_DIR / "dc_vs_pawn.png")
 plt.show()

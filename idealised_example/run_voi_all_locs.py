@@ -26,6 +26,7 @@ def run_voi_all_locations(
     out_path: str = "voi_results.npz",
     location_indices=None,
     frac: float = 0.3,
+    it: int = 0,
     progress_every: int = 50,
 ):
     """Compute EVPPI and probability of decision change for every input,
@@ -59,7 +60,7 @@ def run_voi_all_locations(
     start = time.time()
     for i, loc_ind in enumerate(location_indices):
         samples = pc.get_location_samples(cache, location_index=int(loc_ind))
-        results = voi.compute_all_evppi(samples, frac=frac)  # list of VoIResult, cfg.X_E_LABELS order
+        results = voi.compute_all_evppi(samples, frac=frac, it=it)  # list of VoIResult, cfg.X_E_LABELS order
 
         for j, result in enumerate(results):
             evppi[i, j] = result.evppi
@@ -111,4 +112,4 @@ def load_voi_results(path: str = "voi_results.npz") -> dict:
 
 
 if __name__ == "__main__":
-    run_voi_all_locations()
+    run_voi_all_locations(out_path="voi_results_it0.npz")

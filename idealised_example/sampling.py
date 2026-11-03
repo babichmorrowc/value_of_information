@@ -172,10 +172,7 @@ def compute_Ye_matrix(location_index: int, X_e: dict, ind: np.ndarray) -> np.nda
     # even though nobody is exposed). Since all three decisions then tie at
     # exactly 0.0, argmax(-Y_e) / argmin(Y_e) selects d1 via NumPy's
     # documented first-occurrence tie-breaking (d1 is index 0 in
-    # cfg.DECISION_LABELS) - this is a stable, documented contract, not an
-    # implementation detail, but see tests/test_zero_population.py for a
-    # regression test that pins this behaviour explicitly in case
-    # DECISION_LABELS' order ever changes.
+    # cfg.DECISION_LABELS)
     Y_e[zero_population, :] = 0.0
 
 
