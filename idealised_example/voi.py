@@ -127,10 +127,51 @@ def compute_evppi(samples: EpistemicSamples, input_label: str, frac: float = 0.3
         optimal_decision_uncertain=optimal_decision_uncertain,
     )
 
+def _evppi_core(x, utilities, input_label, frac, it):
+    N, D = utilities.shape
+    smoothed = np.column_stack([
+        fit_smoothing_estimator(x, utilities[:, d], input_label, x_eval=x, frac=frac, it=it)
+        for d in range(D)
+    ])
+    d_star = smoothed.argmax(axis=1)
+    d_opt = int(utilities.mean(axis=0).argmax())      # recomputed on whatever data it is given
+    u_pi = utilities[np.arange(N), d_star]
+    evppi = float(u_pi.mean() - utilities[:, d_opt].mean())
+    prob_change = float(np.mean(d_star != d_opt))
+    return evppi, prob_change, d_opt
 
-def compute_all_evppi(samples: EpistemicSamples, frac: float = 0.3, it: int = 0) -> list:
+def compute_evppi_bootstrap(samples, input_label, frac=0.3, it=0, n_boot=200, alpha=0.05, seed=0):
+    x = np.asarray(samples.X_e[input_label])           # don't cast to float: categorical inputs may be strings
+    utilities = compute_utilities(samples.Y_e)
+    N = utilities.shape[0]
+    rng = np.random.default_rng(seed)
+
+    evppi, prob_change, d_opt = _evppi_core(x, utilities, input_label, frac, it)
+
+    boot = np.empty((n_boot, 2))
+    for b in range(n_boot):
+        idx = rng.integers(0, N, N)                    # resample whole rows
+        boot[b] = _evppi_core(x[idx], utilities[idx], input_label, frac, it)[:2]
+
+    q = [100 * alpha / 2, 100 * (1 - alpha / 2)]
+    ev_lo, ev_hi = np.percentile(boot[:, 0], q)
+    pc_lo, pc_hi = np.percentile(boot[:, 1], q)
+
+    return dict(
+        evppi=evppi,
+        evppi_ci_low=float(ev_lo), evppi_ci_high=float(ev_hi), evppi_se=float(boot[:, 0].std(ddof=1)),
+        prob_change=prob_change,
+        pc_ci_low=float(pc_lo), pc_ci_high=float(pc_hi),
+        d_opt=d_opt,
+    )  
+
+
+def compute_all_evppi(samples: EpistemicSamples, frac: float = 0.3, it: int = 0, bootstrap: bool = False) -> list:
     """Compute VoIResult for every epistemic input, in cfg.X_E_LABELS order."""
-    return [compute_evppi(samples, label, frac=frac, it=it) for label in cfg.X_E_LABELS]
+    if bootstrap:
+        return [compute_evppi_bootstrap(samples, label, frac=frac, it=it) for label in cfg.X_E_LABELS]
+    else:
+        return [compute_evppi(samples, label, frac=frac, it=it) for label in cfg.X_E_LABELS]
 
 
 def plot_smoothing_estimator(
